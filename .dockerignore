@@ -1,0 +1,3 @@
+# Ignorar carpetas
+**/node_modules
+.vscode
