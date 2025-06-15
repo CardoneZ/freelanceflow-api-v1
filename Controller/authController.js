@@ -32,7 +32,6 @@ exports.register = async (req, res, next) => {
 
     const hashed = await bcrypt.hash(Password, 12);
 
-    /* crear usuario ------------------------ */
     const user = await users.create({
       Email,
       PasswordHash: hashed,
@@ -41,7 +40,6 @@ exports.register = async (req, res, next) => {
       Role: role
     });
 
-    /* crear fila auxiliar según rol -------- */
     if (role === 'client') {
       await db.clients.create({ ClientId: user.UserId, Phone: Phone || null });
     }

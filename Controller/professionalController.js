@@ -165,36 +165,84 @@ exports.getProfessionalServices = async (req, res, next) => {
 exports.getProfessionalStats = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { startDate, endDate } = req.query;
     
-    const where = { ProfessionalId: id };
-    if (startDate && endDate) {
-      where.createdAt = { [Op.between]: [startDate, endDate] };
-    }
+    // Obtener fecha actual (sin horas/minutos/segundos)
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
 
-    const stats = {
-      totalAppointments: await db.appointments.count({ where }),
-      completedAppointments: await db.appointments.count({ 
-        where: { ...where, Status: 'completed' } 
-      }),
-      averageRating: await db.reviews.findOne({
-        where: { ProfessionalId: id },
-        attributes: [
-          [db.sequelize.fn('AVG', db.sequelize.col('Rating')), 'avgRating']
-        ],
-        raw: true
-      }),
-      earnings: await db.appointments.findOne({
-        where: { ...where, Status: 'completed' },
-        include: [{ model: db.services, as: 'Service' }],
-        attributes: [
-          [db.sequelize.fn('SUM', db.sequelize.col('Service.Price')), 'totalEarnings']
-        ],
-        raw: true
-      })
-    };
+    // 1. Total de citas
+    const totalAppointments = await db.appointments.count({
+      where: { 
+        '$service.ProfessionalId$': id 
+      },
+      include: [{
+        model: db.services,
+        as: 'service'
+      }]
+    });
 
-    res.json(stats);
+    // 2. Citas de hoy
+    const todayAppointments = await db.appointments.count({
+      where: { 
+        '$service.ProfessionalId$': id,
+        StartTime: { 
+          [Op.between]: [todayStart, todayEnd]
+        }
+      },
+      include: [{
+        model: db.services,
+        as: 'service'
+      }]
+    });
+
+    // 3. Ganancias totales (solo citas completadas)
+    const earningsResult = await db.appointments.findOne({
+      attributes: [
+        [db.sequelize.literal('COALESCE(SUM(service.Price * (appointments.DurationMinutes / 60)), 0)'), 'totalEarnings']
+      ],
+      where: { 
+        '$service.ProfessionalId$': id,
+        Status: 'completed'
+      },
+      include: [{
+        model: db.services,
+        as: 'service',
+        attributes: []
+      }],
+      raw: true
+    });
+
+    // 4. Rating promedio
+    const avgRating = await db.reviews.findOne({
+      attributes: [
+        [db.sequelize.literal('COALESCE(AVG(Rating), 0)'), 'averageRating']
+      ],
+      where: { 
+        '$appointment.service.ProfessionalId$': id 
+      },
+      include: [{
+        model: db.appointments,
+        as: 'appointment',
+        required: true,
+        include: [{
+          model: db.services,
+          as: 'service',
+          required: true
+        }]
+      }],
+      raw: true
+    });
+
+    res.json({
+      totalAppointments,
+      upcomingToday: todayAppointments,
+      totalEarnings: parseFloat(earningsResult?.totalEarnings) || 0,
+      averageRating: parseFloat(avgRating?.averageRating) || 0
+    });
+
   } catch (error) {
     next(error);
   }
