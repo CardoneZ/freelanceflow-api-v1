@@ -15,6 +15,7 @@ DROP TABLE IF EXISTS Services;
 DROP TABLE IF EXISTS Clients;
 DROP TABLE IF EXISTS Professionals;
 DROP TABLE IF EXISTS Users;
+DROP TABLE IF EXISTS Availability;
 
 SET FOREIGN_KEY_CHECKS = 1;
 
@@ -27,8 +28,8 @@ CREATE TABLE Users (
   LastName     VARCHAR(100),
   ProfilePicture VARCHAR(255),  
   Role         ENUM('professional','client','admin') NOT NULL,
-  createdAt    DATETIME DEFAULT CURRENT_TIMESTAMP,  -- ← minúscula
-  updatedAt    DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP  -- ← añadir
+  createdAt    DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updatedAt    DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 /* ------------------ PROFESSIONALS ------------------ */
@@ -38,6 +39,8 @@ CREATE TABLE Professionals (
   Bio            TEXT,
   HourlyRate     DECIMAL(10,2),
   Location       VARCHAR(100),
+  createdAt      DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updatedAt      DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (ProfessionalId),
   CONSTRAINT fk_prof_user
     FOREIGN KEY (ProfessionalId) REFERENCES Users(UserId)
@@ -48,6 +51,8 @@ CREATE TABLE Professionals (
 CREATE TABLE Clients (
   ClientId INT UNSIGNED NOT NULL,
   Phone    VARCHAR(50),
+  createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (ClientId),
   CONSTRAINT fk_client_user
     FOREIGN KEY (ClientId) REFERENCES Users(UserId)
@@ -60,11 +65,12 @@ CREATE TABLE Services (
   ProfessionalId  INT UNSIGNED NOT NULL,
   Name            VARCHAR(150)  NOT NULL,
   Description     TEXT,
-  BaseDuration       INT UNSIGNED NOT NULL DEFAULT 60,
-  MaxDuration        INT UNSIGNED NOT NULL DEFAULT 240,
-  DurationIncrement  INT UNSIGNED NOT NULL DEFAULT 30,
+  BaseDuration    INT UNSIGNED NOT NULL DEFAULT 60,
+  MaxDuration     INT UNSIGNED NOT NULL DEFAULT 240,
+  DurationIncrement INT UNSIGNED NOT NULL DEFAULT 30,
   Price           DECIMAL(10,2) NOT NULL,
-  CreatedAt       DATETIME      DEFAULT CURRENT_TIMESTAMP,
+  createdAt       DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updatedAt       DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   KEY idx_services_professional (ProfessionalId),
   CONSTRAINT fk_service_prof
     FOREIGN KEY (ProfessionalId) REFERENCES Professionals(ProfessionalId)
@@ -83,7 +89,8 @@ CREATE TABLE Appointments (
   Status          ENUM('pending','confirmed','canceled')
                   NOT NULL DEFAULT 'pending',
   Notes           TEXT,
-  CreatedAt       DATETIME DEFAULT CURRENT_TIMESTAMP,
+  createdAt       DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updatedAt       DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   KEY idx_appt_service (ServiceId),
   KEY idx_appt_client  (ClientId),
   CONSTRAINT fk_appt_service
@@ -100,27 +107,29 @@ CREATE TABLE Reviews (
   AppointmentId INT UNSIGNED NOT NULL,
   Rating        TINYINT UNSIGNED NOT NULL,
   Comment       TEXT,
-  CreatedAt     DATETIME DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE KEY uq_reviews_appointment (AppointmentId), -- 1 review por cita
+  createdAt     DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updatedAt     DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_reviews_appointment (AppointmentId),
   CONSTRAINT fk_review_appt
     FOREIGN KEY (AppointmentId) REFERENCES Appointments(AppointmentId)
     ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT chk_reviews_rating CHECK (Rating BETWEEN 1 AND 5)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+/* ----------------- AVAILABILITY ----------------- */
 CREATE TABLE Availability (
-  AvailabilityId INTEGER UNSIGNED AUTO_INCREMENT NOT NULL,
-  ProfessionalId INTEGER UNSIGNED NOT NULL,
+  AvailabilityId INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  ProfessionalId INT UNSIGNED NOT NULL,
   DayOfWeek ENUM('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday') NOT NULL,
   StartTime TIME NOT NULL,
   EndTime TIME NOT NULL,
   IsRecurring TINYINT(1) DEFAULT 1,
   ValidFrom DATE,  
   ValidTo DATE,
-  createdAt DATETIME NOT NULL,
-  updatedAt DATETIME NOT NULL,
-  PRIMARY KEY (`AvailabilityId`),
-  FOREIGN KEY (`ProfessionalId`) REFERENCES `professionals` (`ProfessionalId`) ON DELETE NO ACTION ON UPDATE CASCADE
-) ENGINE=InnoDB;
-
+  createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_availability_professional
+    FOREIGN KEY (ProfessionalId) REFERENCES Professionals(ProfessionalId)
+    ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

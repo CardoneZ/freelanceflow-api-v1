@@ -1,6 +1,6 @@
 const Sequelize = require('sequelize');
 module.exports = function(sequelize, DataTypes) {
-  return sequelize.define('Availability', {
+  return sequelize.define('availability', {
     AvailabilityId: {
       autoIncrement: true,
       type: DataTypes.INTEGER.UNSIGNED,
@@ -54,7 +54,7 @@ module.exports = function(sequelize, DataTypes) {
         ]
       },
       {
-        name: "ProfessionalId",
+        name: "fk_availability_professional",
         using: "BTREE",
         fields: [
           { name: "ProfessionalId" },
