@@ -122,12 +122,29 @@ exports.login = async (req, res, next) => {
 /* ───────────── 4. GET ME ───────────── */
 exports.getMe = async (req, res, next) => {
   try {
-    const user = await users.findByPk(req.user.id, {
-      attributes: { exclude: ['PasswordHash'] }
+    const user = await db.users.findByPk(req.user.UserId, { // Cambiar de req.user.id a req.user.UserId
+      attributes: { exclude: ['PasswordHash'] },
+      include: [
+        {
+          model: db.professionals,
+          as: 'Professional',
+          required: false
+        },
+        {
+          model: db.clients,
+          as: 'Client',
+          required: false
+        }
+      ]
     });
+    
     if (!user) return res.status(404).json({ message: 'User not found' });
-    res.json(user);
-
+    
+    res.json({
+      ...user.get({ plain: true }),
+      professionalInfo: user.Professional,
+      clientInfo: user.Client
+    });
   } catch (err) { next(err); }
 };
 

@@ -75,13 +75,13 @@ exports.createService = async (req, res, next) => {
   try {
     const { ProfessionalId, Name, Description, BaseDuration, MaxDuration, DurationIncrement, Price, PriceType } = req.body;
     
-    // Validar que el profesional existe
+    
     const professional = await db.professionals.findByPk(ProfessionalId);
     if (!professional) {
       return res.status(404).json({ message: 'Professional not found' });
     }
 
-    // Validar duraciones
+   
     if (BaseDuration > MaxDuration) {
       return res.status(400).json({ message: 'Base duration cannot be greater than max duration' });
     }
@@ -166,7 +166,7 @@ const validateServiceDuration = (service, duration) => {
   }
 };
 
-// Nuevo endpoint para validar duración
+
 exports.validateDuration = async (req, res) => {
   try {
     const { serviceId, duration } = req.params;
@@ -191,7 +191,7 @@ exports.validateDuration = async (req, res) => {
 };
 
 
-// Función auxiliar para obtener duraciones permitidas
+
 function getAllowedDurations(service) {
   const durations = [];
   for (let d = service.BaseDuration; d <= service.MaxDuration; d += service.DurationIncrement) {

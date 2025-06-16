@@ -25,8 +25,10 @@ CREATE TABLE Users (
   PasswordHash VARCHAR(255)  NOT NULL,
   FirstName    VARCHAR(100),
   LastName     VARCHAR(100),
+  ProfilePicture VARCHAR(255),  
   Role         ENUM('professional','client','admin') NOT NULL,
-  CreatedAt    DATETIME DEFAULT CURRENT_TIMESTAMP
+  createdAt    DATETIME DEFAULT CURRENT_TIMESTAMP,  -- ← minúscula
+  updatedAt    DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP  -- ← añadir
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 /* ------------------ PROFESSIONALS ------------------ */

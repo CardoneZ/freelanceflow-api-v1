@@ -22,7 +22,15 @@ fs.readdirSync(__dirname)
     !file.endsWith('.test.js'))
   .forEach(file => {
     const model = require(path.join(__dirname, file))(sequelize, Sequelize.DataTypes);
+
+    /* ── clave original (tal cual la define el modelo) ── */
     db[model.name] = model;
+
+    /* 🔹 alias en minúsculas para evitar problemas de capitalización */
+    const lower = model.name.toLowerCase();
+    if (!db[lower]) {
+      db[lower] = model;
+    }
   });
 
 /* ───── asociaciones automáticas nativas (si algún modelo las define) ───── */
@@ -40,7 +48,7 @@ const {
   services,
   appointments,
   reviews,
-  availability      
+  availability
 } = db;
 
 /* truco para evitar throw si un modelo faltara */
@@ -48,28 +56,28 @@ const has = m => Boolean(m);
 
 /* Users ↔ Clients / Professionals */
 if (has(users) && has(clients)) {
-  users.hasOne(clients, { as: 'Client', foreignKey: 'ClientId' });
-  clients.belongsTo(users, { as: 'User', foreignKey: 'ClientId' });
+  users.hasOne(clients, { as: 'Client',        foreignKey: 'ClientId' });
+  clients.belongsTo(users, { as: 'User',        foreignKey: 'ClientId' });
 }
 if (has(users) && has(professionals)) {
   users.hasOne(professionals, { as: 'Professional', foreignKey: 'ProfessionalId' });
-  professionals.belongsTo(users, { as: 'User', foreignKey: 'ProfessionalId' });
+  professionals.belongsTo(users, { as: 'User',      foreignKey: 'ProfessionalId' });
 }
 
 /* Service ↔ Professional */
 if (has(professionals) && has(services)) {
-  professionals.hasMany(services, { as: 'services', foreignKey: 'ProfessionalId' });
+  professionals.hasMany(services, { as: 'services',   foreignKey: 'ProfessionalId' });
   services.belongsTo(professionals, { as: 'Professional', foreignKey: 'ProfessionalId' });
 }
 
 /* Appointment ↔ Service / Client */
 if (has(services) && has(appointments)) {
   services.hasMany(appointments, { as: 'Appointments', foreignKey: 'ServiceId' });
-  appointments.belongsTo(services, { as: 'Service', foreignKey: 'ServiceId' });
+  appointments.belongsTo(services, { as: 'Service',    foreignKey: 'ServiceId' });
 }
 if (has(clients) && has(appointments)) {
   clients.hasMany(appointments, { as: 'Appointments', foreignKey: 'ClientId' });
-  appointments.belongsTo(clients, { as: 'Client', foreignKey: 'ClientId' });
+  appointments.belongsTo(clients, { as: 'Client',     foreignKey: 'ClientId' });
 }
 
 /* Availability ↔ Professional */
@@ -80,20 +88,23 @@ if (has(professionals) && has(availability)) {
 
 /* Reviews ↔ Appointment / Professional / Client */
 if (has(appointments) && has(reviews))
-  appointments.hasOne(reviews, { as: 'Review', foreignKey: 'AppointmentId' });
+  appointments.hasOne(reviews, { as: 'Review',      foreignKey: 'AppointmentId' });
 if (has(reviews) && has(appointments))
   reviews.belongsTo(appointments, { as: 'Appointment', foreignKey: 'AppointmentId' });
 
 if (has(professionals) && has(reviews)) {
-  professionals.hasMany(reviews, { as: 'reviews', foreignKey: 'ProfessionalId' });
+  professionals.hasMany(reviews, { as: 'reviews',        foreignKey: 'ProfessionalId' });
   reviews.belongsTo(professionals, { as: 'Professional', foreignKey: 'ProfessionalId' });
 }
 if (has(clients) && has(reviews)) {
   clients.hasMany(reviews, { as: 'ClientReviews', foreignKey: 'ClientId' });
-  reviews.belongsTo(clients, { as: 'Client', foreignKey: 'ClientId' });
+  reviews.belongsTo(clients, { as: 'Client',      foreignKey: 'ClientId' });
 }
 
 /* ───── exportar ───── */
 db.sequelize = sequelize;
 db.Sequelize = Sequelize;
 module.exports = db;
+
+/* (opcional) ver qué keys quedaron registradas */
+console.log('Model keys =>', Object.keys(db));

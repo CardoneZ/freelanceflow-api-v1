@@ -91,19 +91,19 @@ exports.createProfessional = async (req, res, next) => {
   try {
     const { UserId, Title, Bio, HourlyRate, Location } = req.body;
     
-    // Verificar que el usuario existe
+    
     const user = await db.users.findByPk(UserId);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Verificar que no es ya profesional
+    
     const existingProfessional = await db.professionals.findOne({ where: { ProfessionalId: UserId } });
     if (existingProfessional) {
       return res.status(400).json({ message: 'User is already a professional' });
     }
 
-    // Crear profesional
+    
     const professional = await db.professionals.create({
       ProfessionalId: UserId,
       Title,
@@ -112,7 +112,7 @@ exports.createProfessional = async (req, res, next) => {
       Location
     });
 
-    // Actualizar rol del usuario si es necesario
+
     if (user.Role !== 'professional') {
       await user.update({ Role: 'professional' });
     }
@@ -137,100 +137,89 @@ exports.updateProfessional = async (req, res, next) => {
   }
 };
 
-exports.getProfessionalServices = async (req, res, next) => {
-  try {
+exports.getProfessionalServices = async (req,res,next)=>{
+  try{
     const services = await db.services.findAll({
-      where: { ProfessionalId: req.params.id },
-      include: [
-        {
-          model: db.professionals,
-          as: 'Professional',
-          include: [
-            {
-              model: db.users,
-              as: 'User',
-              attributes: ['UserId', 'FirstName', 'LastName']
-            }
-          ]
-        }
-      ]
+      where : { ProfessionalId: req.params.id },
+      include:[{
+        model : db.professionals,
+        as    : 'Professional',
+        include:[{
+          model      : db.users,
+          as         : 'User',
+          attributes : ['FirstName','LastName']
+        }]
+      }],
+      order:[['ServiceId','DESC']]
     });
-
     res.json(services);
-  } catch (error) {
-    next(error);
-  }
+  }catch(e){ next(e); }
 };
+
+
+// ─────────────────── stats del profesional ───────────────────
+const { fn, col, literal } = db.Sequelize;
 
 exports.getProfessionalStats = async (req, res, next) => {
   try {
-    const { id } = req.params;
-    
-    // Obtener fecha actual (sin horas/minutos/segundos)
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    
-    const todayEnd = new Date();
-    todayEnd.setHours(23, 59, 59, 999);
+    const proId = req.params.id;
 
-    // 1. Total de citas
+    // rango de “hoy”
+    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+    const todayEnd   = new Date(); todayEnd  .setHours(23, 59, 59, 999);
+
+    /* 1. Total de citas del profesional */
     const totalAppointments = await db.appointments.count({
-      where: { 
-        '$service.ProfessionalId$': id 
-      },
       include: [{
-        model: db.services,
-        as: 'service'
+        model : db.services,
+        as    : 'Service',
+        where : { ProfessionalId: proId },   // <-- filtro en la relación
+        attributes: []                       // no necesitamos columnas del servicio
       }]
     });
 
-    // 2. Citas de hoy
-    const todayAppointments = await db.appointments.count({
-      where: { 
-        '$service.ProfessionalId$': id,
-        StartTime: { 
-          [Op.between]: [todayStart, todayEnd]
-        }
-      },
+    /* 2. Citas de HOY */
+    const upcomingToday = await db.appointments.count({
+      where: { StartTime: { [Op.between]: [todayStart, todayEnd] } },
       include: [{
-        model: db.services,
-        as: 'service'
+        model : db.services,
+        as    : 'Service',
+        where : { ProfessionalId: proId },
+        attributes: []
       }]
     });
 
-    // 3. Ganancias totales (solo citas completadas)
-    const earningsResult = await db.appointments.findOne({
+    /* 3. Ganancias totales   (si tu precio es fijo en Service.Price) */
+    const earnings = await db.appointments.findOne({
       attributes: [
-        [db.sequelize.literal('COALESCE(SUM(service.Price * (appointments.DurationMinutes / 60)), 0)'), 'totalEarnings']
+        [fn('COALESCE',
+            fn('SUM',
+               literal('`Service`.`Price` * (`appointments`.`DurationMinutes` / 60)')
+            ), 0),
+         'total']
       ],
-      where: { 
-        '$service.ProfessionalId$': id,
-        Status: 'completed'
-      },
+      where: { Status: 'completed' },
       include: [{
-        model: db.services,
-        as: 'service',
+        model : db.services,
+        as    : 'Service',
+        where : { ProfessionalId: proId },
         attributes: []
       }],
       raw: true
     });
 
-    // 4. Rating promedio
-    const avgRating = await db.reviews.findOne({
-      attributes: [
-        [db.sequelize.literal('COALESCE(AVG(Rating), 0)'), 'averageRating']
-      ],
-      where: { 
-        '$appointment.service.ProfessionalId$': id 
-      },
+    /* 4. Rating promedio */
+    const avg = await db.reviews.findOne({
+      attributes: [[fn('COALESCE', fn('AVG', col('Rating')), 0), 'avg']],
       include: [{
-        model: db.appointments,
-        as: 'appointment',
-        required: true,
+        model : db.appointments,
+        as    : 'Appointment',
+        attributes: [],
         include: [{
-          model: db.services,
-          as: 'service',
-          required: true
+          model : db.services,
+          as    : 'Service',
+          where : { ProfessionalId: proId },
+          attributes: []
         }]
       }],
       raw: true
@@ -238,12 +227,10 @@ exports.getProfessionalStats = async (req, res, next) => {
 
     res.json({
       totalAppointments,
-      upcomingToday: todayAppointments,
-      totalEarnings: parseFloat(earningsResult?.totalEarnings) || 0,
-      averageRating: parseFloat(avgRating?.averageRating) || 0
+      upcomingToday,
+      totalEarnings: Number(earnings.total),
+      averageRating: Number(avg.avg).toFixed(2)
     });
 
-  } catch (error) {
-    next(error);
-  }
+  } catch (err) { next(err); }
 };

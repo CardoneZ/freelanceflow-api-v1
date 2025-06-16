@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const db = require('../Models');
 const { authenticate } = require('../Middlewares/authMiddleware');
+const path = require('path'); 
 
 class Server {
   constructor () {
@@ -29,6 +30,9 @@ class Server {
     this.app.use(cors());
     this.app.use(express.json());
     this.app.use(express.static('public'));
+    this.app.use(
+    '/uploads',
+    express.static(path.join(__dirname, '..', 'public', 'uploads')));
   }
 
   /* -------- Rutas -------- */
@@ -40,19 +44,29 @@ class Server {
     this.app.use(this.paths.services, require('../Routes/serviceRoutes'));
     this.app.use(this.paths.reviews, require('../Routes/reviewRoutes'));
     this.app.use(this.paths.users, require('../Routes/userRoutes'));
-     this.app.use(this.paths.availability, require('../Routes/availabilityRoutes'));
+    this.app.use(this.paths.availability, require('../Routes/availabilityRoutes'));
   }
 
   /* -------- Arranque -------- */
-  listen () {
-    db.sequelize.sync({ force: true })  // ¡Cuidado! Esto eliminará las tablas existentes
-      .then(() => {
-        this.app.listen(this.port, () =>
-          console.log(`Servidor escuchando en puerto ${this.port}`)
-        );
-      })
-      .catch(err => console.error('Database connection error:', err));
-  }
+  listen() {
+  // Opción segura para desarrollo sin migraciones
+  db.sequelize.sync() // Sin parámetros = solo crea tablas si no existen
+    .then(() => {
+      if (process.env.CREATE_TEST_DATA === 'false') {
+        require('../Utils/createTestData')(); 
+      }
+      
+      this.app.listen(this.port, () => {
+        console.log(`✅ Servidor activo en puerto ${this.port}`);
+        console.log(`🔹 Modo: ${process.env.NODE_ENV || 'development'}`);
+        console.log(`🔹 Database: ${db.sequelize.config.database}`);
+      });
+    })
+    .catch(err => {
+      console.error('❌ Error de conexión a la base:', err);
+      process.exit(1);
+    });
+}
 }
 
 module.exports = Server;

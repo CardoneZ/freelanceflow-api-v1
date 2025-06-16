@@ -1,6 +1,6 @@
 const Sequelize = require('sequelize');
 module.exports = function(sequelize, DataTypes) {
-  return sequelize.define('users', {
+  return sequelize.define('Users', {
     UserId: {
       autoIncrement: true,
       type: DataTypes.INTEGER.UNSIGNED,
@@ -22,6 +22,10 @@ module.exports = function(sequelize, DataTypes) {
     },
     LastName: {
       type: DataTypes.STRING(100),
+      allowNull: true
+    },
+    ProfilePicture: {
+      type: DataTypes.STRING(255),
       allowNull: true
     },
     Role: {
