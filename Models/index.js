@@ -80,6 +80,19 @@ if (has(clients) && has(appointments)) {
   appointments.belongsTo(clients, { as: 'Client',     foreignKey: 'ClientId' });
 }
 
+
+/* Appointment ↔ Professional */
+if (has(professionals)){
+  professionals.hasMany(appointments, { 
+    as: 'Appointments', 
+    foreignKey: 'ProfessionalId' 
+  });
+  appointments.belongsTo(professionals, { 
+    as: 'Professional', 
+    foreignKey: 'ProfessionalId' 
+  });
+}
+
 /* Availability ↔ Professional */
 if (has(professionals) && has(availability)) {
   professionals.hasMany(availability, { as: 'Availability', foreignKey: 'ProfessionalId' });
@@ -93,12 +106,25 @@ if (has(reviews) && has(appointments))
   reviews.belongsTo(appointments, { as: 'Appointment', foreignKey: 'AppointmentId' });
 
 if (has(professionals) && has(reviews)) {
-  professionals.hasMany(reviews, { as: 'reviews',        foreignKey: 'ProfessionalId' });
-  reviews.belongsTo(professionals, { as: 'Professional', foreignKey: 'ProfessionalId' });
+  professionals.hasMany(reviews, { 
+    as: 'Reviews', 
+    foreignKey: 'ProfessionalId' 
+  });
+  reviews.belongsTo(professionals, { 
+    as: 'Professional', 
+    foreignKey: 'ProfessionalId' 
+  });
 }
+
 if (has(clients) && has(reviews)) {
-  clients.hasMany(reviews, { as: 'ClientReviews', foreignKey: 'ClientId' });
-  reviews.belongsTo(clients, { as: 'Client',      foreignKey: 'ClientId' });
+  clients.hasMany(reviews, { 
+    as: 'Reviews', 
+    foreignKey: 'ClientId' 
+  });
+  reviews.belongsTo(clients, { 
+    as: 'Client', 
+    foreignKey: 'ClientId' 
+  });
 }
 
 /* ───── exportar ───── */

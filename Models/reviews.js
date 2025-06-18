@@ -16,6 +16,22 @@ module.exports = function(sequelize, DataTypes) {
       },
       unique: "fk_review_appt"
     },
+    ProfessionalId: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: false,
+      references: {
+        model: 'professionals',
+        key: 'ProfessionalId'
+      }
+    },
+    ClientId: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: false,
+      references: {
+        model: 'clients',
+        key: 'ClientId'
+      }
+    },
     Rating: {
       type: DataTypes.TINYINT.UNSIGNED,
       allowNull: false
@@ -43,6 +59,20 @@ module.exports = function(sequelize, DataTypes) {
         using: "BTREE",
         fields: [
           { name: "AppointmentId" },
+        ]
+      },
+      {
+        name: "fk_review_professional",
+        using: "BTREE",
+        fields: [
+          { name: "ProfessionalId" },
+        ]
+      },
+      {
+        name: "fk_review_client",
+        using: "BTREE",
+        fields: [
+          { name: "ClientId" },
         ]
       },
     ]

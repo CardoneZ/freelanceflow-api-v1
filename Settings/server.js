@@ -27,12 +27,14 @@ class Server {
 
   /* -------- Middlewares -------- */
   middlewares () {
-    this.app.use(cors());
+
+    this.app.use(cors({
+      origin: 'http://127.0.0.1:5501',
+      credentials: true}));
+
     this.app.use(express.json());
     this.app.use(express.static('public'));
-    this.app.use(
-    '/uploads',
-    express.static(path.join(__dirname, '..', 'public', 'uploads')));
+    this.app.use('/uploads', express.static('public/uploads'));
   }
 
   /* -------- Rutas -------- */
@@ -49,13 +51,10 @@ class Server {
 
   /* -------- Arranque -------- */
   listen() {
-  // Opción segura para desarrollo sin migraciones
-  db.sequelize.sync() // Sin parámetros = solo crea tablas si no existen
+ 
+  db.sequelize.sync() 
     .then(() => {
-      if (process.env.CREATE_TEST_DATA === 'false') {
-        require('../Utils/createTestData')(); 
-      }
-      
+
       this.app.listen(this.port, () => {
         console.log(`✅ Servidor activo en puerto ${this.port}`);
         console.log(`🔹 Modo: ${process.env.NODE_ENV || 'development'}`);

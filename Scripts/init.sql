@@ -81,20 +81,26 @@ CREATE TABLE Services (
 CREATE TABLE Appointments (
   AppointmentId   INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   ServiceId       INT UNSIGNED NOT NULL,
+  ProfessionalId  INT UNSIGNED NOT NULL,  -- Nueva columna agregada
   ClientId        INT UNSIGNED NOT NULL,
   StartTime       DATETIME     NOT NULL,
   DurationMinutes INT UNSIGNED NOT NULL,
   EndTime         DATETIME GENERATED ALWAYS AS
                   (DATE_ADD(StartTime, INTERVAL DurationMinutes MINUTE)) STORED,
-  Status          ENUM('pending','confirmed','canceled')
+  Status          ENUM('pending','confirmed','completed','canceled')
                   NOT NULL DEFAULT 'pending',
   Notes           TEXT,
   createdAt       DATETIME DEFAULT CURRENT_TIMESTAMP,
   updatedAt       DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   KEY idx_appt_service (ServiceId),
   KEY idx_appt_client  (ClientId),
+  KEY idx_appt_professional (ProfessionalId),  -- Nuevo índice agregado
+  KEY idx_appt_start_time (StartTime),         -- Nuevo índice para búsquedas por fecha
   CONSTRAINT fk_appt_service
     FOREIGN KEY (ServiceId) REFERENCES Services(ServiceId)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT fk_appt_professional
+    FOREIGN KEY (ProfessionalId) REFERENCES Professionals(ProfessionalId)
     ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT fk_appt_client
     FOREIGN KEY (ClientId) REFERENCES Clients(ClientId)
@@ -105,6 +111,8 @@ CREATE TABLE Appointments (
 CREATE TABLE Reviews (
   ReviewId      INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   AppointmentId INT UNSIGNED NOT NULL,
+  ProfessionalId INT UNSIGNED NOT NULL,  -- Nueva columna agregada
+  ClientId      INT UNSIGNED NOT NULL,   -- Nueva columna agregada
   Rating        TINYINT UNSIGNED NOT NULL,
   Comment       TEXT,
   createdAt     DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -112,6 +120,12 @@ CREATE TABLE Reviews (
   UNIQUE KEY uq_reviews_appointment (AppointmentId),
   CONSTRAINT fk_review_appt
     FOREIGN KEY (AppointmentId) REFERENCES Appointments(AppointmentId)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT fk_review_professional
+    FOREIGN KEY (ProfessionalId) REFERENCES Professionals(ProfessionalId)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT fk_review_client
+    FOREIGN KEY (ClientId) REFERENCES Clients(ClientId)
     ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT chk_reviews_rating CHECK (Rating BETWEEN 1 AND 5)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -132,4 +146,3 @@ CREATE TABLE Availability (
     FOREIGN KEY (ProfessionalId) REFERENCES Professionals(ProfessionalId)
     ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-

@@ -14,7 +14,6 @@ const checkDuration = (service, minutes) => {
     throw new Error(`Duration cannot be > ${service.MaxDuration}`);
 };
 
-/* ═════════ crear cita ═════════ */
 exports.createAppointment = async (req, res, next) => {
   try {
     const { ServiceId, ClientId, StartTime, DurationMinutes, Notes } = req.body;
@@ -25,8 +24,8 @@ exports.createAppointment = async (req, res, next) => {
     });
     if (!service) return res.status(404).json({ message: 'Service not found' });
 
-    const client  = await db.clients.findByPk(ClientId);
-    if (!client)  return res.status(404).json({ message: 'Client not found' });
+    const client = await db.clients.findByPk(ClientId);
+    if (!client) return res.status(404).json({ message: 'Client not found' });
 
     /* 2. duración correcta */
     try { checkDuration(service, DurationMinutes); }
@@ -35,60 +34,117 @@ exports.createAppointment = async (req, res, next) => {
     /* 3. fechas */
     const start = moment(StartTime);
     if (!start.isValid()) return res.status(400).json({ message: 'Invalid date' });
-    const end   = start.clone().add(DurationMinutes, 'minutes').toDate();
-    const day   = start.format('dddd').toLowerCase();
+    const end = start.clone().add(DurationMinutes, 'minutes').toDate();
 
-    /* 4-A. disponibilidad del profesional */
-    const slotOk = await db.availability.findOne({
-      where: {
-        ProfessionalId: service.Professional.ProfessionalId,
-        DayOfWeek     : day,
-        StartTime     : { [Op.lte]: start.format('HH:mm:ss') },
-        EndTime       : { [Op.gte]: moment(end).format('HH:mm:ss') },
-        [Op.or]: [
-          { IsRecurring: true },
-          {
-            [Op.and]: [
-              { ValidFrom: { [Op.lte]: start.format('YYYY-MM-DD') } },
-              {
-                [Op.or]: [
-                  { ValidTo: null },
-                  { ValidTo: { [Op.gte]: start.format('YYYY-MM-DD') } }
-                ]
-              }
-            ]
-          }
-        ]
-      }
-    });
-    if (!slotOk)
-      return res.status(400).json({ message: 'Professional not available at this time' });
-
-    /* 4-B. solapamiento con otras citas */
-    const clash = await db.appointments.findOne({
-      where: {
-        '$Service.ProfessionalId$': service.Professional.ProfessionalId,
-        StartTime: { [Op.lt]: end },
-        EndTime  : { [Op.gt]: start.toDate() }
-      },
-      include: [{ model: db.services, as: 'Service' }]
-    });
-    if (clash)
-      return res.status(400).json({ message: 'Professional already has an appointment in that slot' });
-
-    /* 5. crear */
+    /* 4. crear con ProfessionalId */
     const appt = await db.appointments.create({
       ServiceId,
+      ProfessionalId: service.Professional.ProfessionalId, // Añadido
       ClientId,
-      StartTime : start.toDate(),
-      EndTime   : end,
+      StartTime: start.toDate(),
+      EndTime: end,
       DurationMinutes,
-      Status    : 'pending',
+      Status: 'pending',
       Notes
     });
 
     res.status(201).json(appt);
   } catch (err) { next(err); }
+};
+
+// Optimizar getAllAppointments
+exports.getAllAppointments = async (req, res, next) => {
+  try {
+    const { professionalId, clientId, status, dateFrom, dateTo } = req.query;
+    
+    const where = {};
+    if (clientId) where.ClientId = clientId;
+    if (professionalId) where.ProfessionalId = professionalId; // Directo ahora
+    if (status) where.Status = status;
+    
+    if (dateFrom || dateTo) {
+      where.StartTime = {};
+      if (dateFrom) where.StartTime[Op.gte] = new Date(dateFrom);
+      if (dateTo) where.StartTime[Op.lte] = new Date(dateTo);
+    }
+
+    const includes = [
+      {
+        model: db.services,
+        as: 'Service',
+        attributes: ['ServiceId', 'Name', 'Description', 'Price']
+      },
+      {
+        model: db.clients,
+        as: 'Client',
+        include: [{
+          model: db.users,
+          as: 'User',
+          attributes: ['UserId', 'FirstName', 'LastName', 'ProfilePicture']
+        }]
+      },
+      {
+        model: db.professionals,
+        as: 'Professional',
+        include: [{
+          model: db.users,
+          as: 'User',
+          attributes: ['UserId', 'FirstName', 'LastName', 'ProfilePicture']
+        }]
+      }
+    ];
+
+    const appointments = await db.appointments.findAll({
+      where,
+      include: includes,
+      order: [['StartTime', 'ASC']]
+    });
+
+    res.json(appointments);
+  } catch (error) {
+    console.error('Error en getAllAppointments:', error);
+    next(error);
+  }
+};
+
+// Optimizar getUpcomingAppointments
+exports.getUpcomingAppointments = async (req, res, next) => {
+  try {
+    const where = { 
+      [Op.or]: [
+        { ClientId: req.user.UserId },
+        { ProfessionalId: req.user.UserId } // Más directo ahora
+      ],
+      StartTime: { [Op.gte]: new Date() },
+      Status: { [Op.in]: ['pending', 'confirmed'] }
+    };
+
+    const appointments = await db.appointments.findAll({
+      where,
+      include: [
+        {
+          model: db.services,
+          as: 'Service',
+          attributes: ['ServiceId', 'Name']
+        },
+        {
+          model: db.clients,
+          as: 'Client',
+          include: [{
+            model: db.users,
+            as: 'User',
+            attributes: ['FirstName', 'LastName', 'ProfilePicture']
+          }]
+        }
+      ],
+      order: [['StartTime', 'ASC']],
+      limit: 5
+    });
+
+    res.json(appointments);
+  } catch (error) {
+    next(error);
+  }
 };
 
 /* ═════════ util – calcular slots disponibles ═════════ */
@@ -155,64 +211,89 @@ exports.getProfessionalAvailability = async (req, res, next) => {
 };
 
 
+// Modificar el método getAllAppointments para soportar paginación
 exports.getAllAppointments = async (req, res, next) => {
   try {
-    const { professionalId, clientId, status, dateFrom, dateTo } = req.query;
-    const where = {};
+    const { 
+      professionalId, 
+      clientId, 
+      status, 
+      dateFrom, 
+      dateTo,
+      page = 1,      // Nueva: página actual, default 1
+      limit = 10,    // Nueva: items por página, default 10
+      sortBy = 'StartTime',
+      sortOrder = 'ASC'
+    } = req.query;
     
-    if (professionalId) {
-      where['$Service.ProfessionalId$'] = professionalId;
-    }
+    const offset = (page - 1) * limit;
+    
+    const where = {};
     if (clientId) where.ClientId = clientId;
+    if (professionalId) where.ProfessionalId = professionalId;
     if (status) where.Status = status;
+    
     if (dateFrom || dateTo) {
       where.StartTime = {};
-      if (dateFrom) where.StartTime[Op.gte] = dateFrom;
-      if (dateTo) where.StartTime[Op.lte] = dateTo;
+      if (dateFrom) where.StartTime[Op.gte] = new Date(dateFrom);
+      if (dateTo) where.StartTime[Op.lte] = new Date(dateTo);
     }
 
+    const includes = [
+      {
+        model: db.services,
+        as: 'Service',
+        attributes: ['ServiceId', 'Name', 'Description', 'Price']
+      },
+      {
+        model: db.clients,
+        as: 'Client',
+        include: [{
+          model: db.users,
+          as: 'User',
+          attributes: ['UserId', 'FirstName', 'LastName', 'ProfilePicture']
+        }]
+      },
+      {
+        model: db.professionals,
+        as: 'Professional',
+        include: [{
+          model: db.users,
+          as: 'User',
+          attributes: ['UserId', 'FirstName', 'LastName', 'ProfilePicture']
+        }]
+      }
+    ];
+
+    // Obtener el total de registros (para cálculo de páginas)
+    const total = await db.appointments.count({ where, include: includes });
+    
+    // Obtener los datos paginados
     const appointments = await db.appointments.findAll({
       where,
-      include: [
-        {
-          model: db.services,
-          as: 'Service',
-          include: [
-            {
-              model: db.professionals,
-              as: 'Professional',
-              include: [
-                {
-                  model: db.users,
-                  as: 'User',
-                  attributes: ['UserId', 'FirstName', 'LastName']
-                }
-              ]
-            }
-          ]
-        },
-        {
-          model: db.clients,
-          as: 'Client',
-          include: [
-            {
-              model: db.users,
-              as: 'User',
-              attributes: ['UserId', 'FirstName', 'LastName']
-            }
-          ]
-        }
-      ],
-      order: [
-        ['StartTime', 'ASC']
-      ]
+      include: includes,
+      order: [[sortBy, sortOrder]],
+      limit: parseInt(limit),
+      offset: parseInt(offset)
     });
 
-    res.json(appointments);
+    res.json({
+      data: appointments,
+      pagination: {
+        totalItems: total,
+        totalPages: Math.ceil(total / limit),
+        currentPage: parseInt(page),
+        itemsPerPage: parseInt(limit),
+        hasNextPage: page * limit < total,
+        hasPreviousPage: page > 1
+      }
+    });
   } catch (error) {
+    console.error('Error en getAllAppointments:', error);
     next(error);
   }
 };
+
 
 exports.getAppointmentById = async (req, res, next) => {
   try {
@@ -296,8 +377,7 @@ exports.updateAppointmentStatus = async (req, res, next) => {
     });
     if (!appt) return res.status(404).json({ message:'Appointment not found' });
 
-    /* Sólo el profesional dueño o un admin puede cambiarla */
-    if (req.user.role !== 'admin' &&
+    if (req.user.Role !== 'admin' &&
         req.user.UserId !== appt.Service.ProfessionalId)
       return res.status(403).json({ message:'Not authorized' });
 
@@ -306,59 +386,6 @@ exports.updateAppointmentStatus = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-
-
-exports.getUpcomingAppointments = async (req, res, next) => {
-  try {
-    const where = { 
-      [Op.or]: [
-        { ClientId: req.user.UserId },
-        { '$Service.ProfessionalId$': req.user.UserId }
-      ],
-      StartTime: { [Op.gte]: new Date() }
-    };
-
-    const appointments = await db.appointments.findAll({
-      where,
-      include: [
-        {
-          model: db.services,
-          as: 'Service',
-          include: [
-            {
-              model: db.professionals,
-              as: 'Professional',
-              include: [
-                {
-                  model: db.users,
-                  as: 'User',
-                  attributes: ['FirstName', 'LastName']
-                }
-              ]
-            }
-          ]
-        },
-        {
-          model: db.clients,
-          as: 'Client',
-          include: [
-            {
-              model: db.users,
-              as: 'User',
-              attributes: ['FirstName', 'LastName']
-            }
-          ]
-        }
-      ],
-      order: [['StartTime', 'ASC']],
-      limit: 5
-    });
-
-    res.json(appointments);
-  } catch (error) {
-    next(error);
-  }
-};
 
 exports.completeAppointment = async (req, res, next) => {
   try {

@@ -15,6 +15,14 @@ module.exports = function(sequelize, DataTypes) {
         key: 'ServiceId'
       }
     },
+    ProfessionalId: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: false,
+      references: {
+        model: 'professionals',
+        key: 'ProfessionalId'
+      }
+    },
     ClientId: {
       type: DataTypes.INTEGER.UNSIGNED,
       allowNull: false,
@@ -36,7 +44,7 @@ module.exports = function(sequelize, DataTypes) {
       allowNull: true
     },
     Status: {
-      type: DataTypes.ENUM('pending','confirmed','canceled'),
+      type: DataTypes.ENUM('pending','confirmed','completed','canceled'),
       allowNull: false,
       defaultValue: "pending"
     },
@@ -69,6 +77,20 @@ module.exports = function(sequelize, DataTypes) {
         using: "BTREE",
         fields: [
           { name: "ClientId" },
+        ]
+      },
+      {
+        name: "idx_appt_professional",
+        using: "BTREE",
+        fields: [
+          { name: "ProfessionalId" },
+        ]
+      },
+      {
+        name: "idx_appt_start_time",
+        using: "BTREE",
+        fields: [
+          { name: "StartTime" },
         ]
       },
     ]
