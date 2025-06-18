@@ -3,22 +3,13 @@ const { Op } = require('sequelize');
 
 
 exports.getAllServices = async (req, res, next) => {
+  console.log('Entering getAllServices for route:', req.path, 'with params:', req.params, 'and query:', req.query);
   try {
     const { professionalId, search, minPrice, maxPrice, minDuration, maxDuration } = req.query;
     const where = {};
-    
+    if (req.params.id) where.ProfessionalId = req.params.id;
     if (professionalId) where.ProfessionalId = professionalId;
-    if (search) {
-      where[Op.or] = [
-        { Name: { [Op.like]: `%${search}%` } },
-        { Description: { [Op.like]: `%${search}%` } }
-      ];
-    }
-    if (minPrice) where.Price = { [Op.gte]: minPrice };
-    if (maxPrice) where.Price = { ...where.Price, [Op.lte]: maxPrice };
-    if (minDuration) where.BaseDuration = { [Op.gte]: minDuration };
-    if (maxDuration) where.MaxDuration = { [Op.lte]: maxDuration };
-
+    console.log('GetAllServices - Where clause:', where);
     const services = await db.services.findAll({
       where,
       include: [
@@ -36,9 +27,16 @@ exports.getAllServices = async (req, res, next) => {
       ],
       order: [['ServiceId', 'DESC']]
     });
-
-    res.json(services);
+    const mappedServices = services.map(service => ({
+      id: service.ServiceId,
+      name: service.Name,
+      price: service.Price,
+      duration: service.BaseDuration
+    }));
+    console.log('Mapped services:', mappedServices);
+    res.json(mappedServices);
   } catch (error) {
+    console.error('Error in getAllServices:', error);
     next(error);
   }
 };

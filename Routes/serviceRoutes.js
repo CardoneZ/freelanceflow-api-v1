@@ -32,4 +32,11 @@ router.delete(
   ctrl.deleteService
 );
 
+router.get('/professionals/:id/services', 
+  auth.authenticate, 
+  auth.authorize([roles.PROFESSIONAL, roles.ADMIN]), 
+  ctrl.getAllServices
+);
+
+
 module.exports = router;

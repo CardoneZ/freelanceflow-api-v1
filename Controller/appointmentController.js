@@ -363,27 +363,38 @@ exports.cancelAppointment = async (req, res, next) => {
   }
 };
 
-/* ═════════ update status ═════════ */
 exports.updateAppointmentStatus = async (req, res, next) => {
+  console.log('Entering updateAppointmentStatus for appointment:', req.params.id); // Nuevo log
   try {
-    const { id }     = req.params;
-    const { Status } = req.body;              // 'confirmed', 'completed', etc.
+    const { id } = req.params;
+    const { Status } = req.body;
 
-    if (!['pending','confirmed','completed','cancelled'].includes(Status))
-      return res.status(400).json({ message:'Invalid status value' });
+    if (!['pending', 'confirmed', 'completed', 'cancelled'].includes(Status))
+      return res.status(400).json({ message: 'Invalid status value' });
 
     const appt = await db.appointments.findByPk(id, {
-      include:[{ model: db.services, as:'Service' }]
+      include: [{ 
+        model: db.services, 
+        as: 'Service',
+        include: [{ model: db.professionals, as: 'Professional' }]
+      }]
     });
-    if (!appt) return res.status(404).json({ message:'Appointment not found' });
+    if (!appt) return res.status(404).json({ message: 'Appointment not found' });
+
+    console.log('Debug - User:', req.user);
+    console.log('Debug - Appointment:', appt);
+    console.log('Debug - Service ProfessionalId:', appt.Service?.Professional?.ProfessionalId);
 
     if (req.user.Role !== 'admin' &&
-        req.user.UserId !== appt.Service.ProfessionalId)
-      return res.status(403).json({ message:'Not authorized' });
+        req.user.UserId !== appt.Service.Professional?.ProfessionalId)
+      return res.status(403).json({ message: 'Not authorized' });
 
     await appt.update({ Status });
     res.json(appt);
-  } catch (err) { next(err); }
+  } catch (err) {
+    console.error('Error in updateAppointmentStatus:', err); // Log errores
+    next(err);
+  }
 };
 
 
