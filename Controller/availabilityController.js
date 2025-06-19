@@ -6,52 +6,49 @@ const Availability = db.availability;
 
 // availabilityController.js
 exports.createAvailability = async (req, res, next) => {
-    try {
-        const { id } = req.params;
-        const { availability } = req.body;
+  try {
+    const { id } = req.params;
+    const { availability } = req.body;
 
-        if (req.user.role !== 'admin' && req.user.UserId !== +id) {
-            return res.status(403).json({ message: 'Not authorized' });
-        }
-        
-        const professional = await db.professionals.findByPk(id);
-        if (!professional) {
-            return res.status(404).json({ message: 'Professional not found' });
-        }
-
-        // Validación mejorada
-        for (let slot of availability) {
-            if (!slot.StartTime || !slot.EndTime) {
-                return res.status(400).json({ message: 'Missing required fields: StartTime or EndTime' });
-            }
-            if (slot.StartTime >= slot.EndTime) {
-                return res.status(400).json({ message: 'Start time must be earlier than end time' });
-            }
-            if (slot.IsRecurring && (slot.DayOfWeek === undefined || slot.DayOfWeek === null)) {
-                return res.status(400).json({ message: 'DayOfWeek is required for recurring slots' });
-            }
-        }
-
-        // Convertir DayOfWeek de número a texto si es necesario
-        const formattedAvailability = availability.map(slot => ({
-            ProfessionalId: id,
-            DayOfWeek: slot.IsRecurring ? 
-                ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][parseInt(slot.DayOfWeek)] : 
-                null,
-            StartTime: slot.StartTime,
-            EndTime: slot.EndTime,
-            IsRecurring: slot.IsRecurring,
-            ValidFrom: slot.IsRecurring ? null : slot.ValidFrom,
-            ValidTo: slot.IsRecurring ? null : slot.ValidTo
-        }));
-
-        const newAvailability = await Availability.bulkCreate(formattedAvailability);
-        res.status(201).json(newAvailability);
-    } catch (error) {
-        console.error('Create availability error:', error);
-        res.status(500).json({ message: 'Server error while creating availability', error: error.message });
-        next(error);
+    if (req.user.role !== 'admin' && req.user.UserId !== +id) {
+      return res.status(403).json({ message: 'Not authorized' });
     }
+    
+    const professional = await db.professionals.findByPk(id);
+    if (!professional) {
+      return res.status(404).json({ message: 'Professional not found' });
+    }
+
+    // Validación mejorada
+    for (let slot of availability) {
+      if (!slot.StartTime || !slot.EndTime) {
+        return res.status(400).json({ message: 'Missing required fields: StartTime or EndTime' });
+      }
+      if (slot.StartTime >= slot.EndTime) {
+        return res.status(400).json({ message: 'Start time must be earlier than end time' });
+      }
+      if (slot.IsRecurring && !slot.DayOfWeek && slot.DayOfWeek !== 0) {
+        return res.status(400).json({ message: 'DayOfWeek is required for recurring slots' });
+      }
+    }
+
+    const formattedAvailability = availability.map(slot => ({
+      ProfessionalId: id,
+      DayOfWeek: slot.IsRecurring ? slot.DayOfWeek : null, // Accept number or string
+      StartTime: slot.StartTime,
+      EndTime: slot.EndTime,
+      IsRecurring: slot.IsRecurring,
+      ValidFrom: slot.ValidFrom || new Date().toISOString().split('T')[0],
+      ValidTo: slot.IsRecurring ? (slot.ValidTo || '2025-12-31') : slot.ValidTo
+    }));
+
+    const newAvailability = await Availability.bulkCreate(formattedAvailability);
+    res.status(201).json(newAvailability);
+  } catch (error) {
+    console.error('Create availability error:', error);
+    res.status(500).json({ message: 'Server error while creating availability', error: error.message });
+    next(error);
+  }
 };
 
 // Función para calcular slots disponibles
@@ -96,94 +93,99 @@ function calculateAvailableSlots(availability, appointments, duration, date) {
 }
 
 exports.getProfessionalAvailability = async (req, res, next) => {
-    try {
-        const { id } = req.params;
-        const { date } = req.query;
-        
-        if (!date) {
-            return res.status(400).json({ message: 'Date parameter is required' });
+  try {
+    const { id } = req.params;
+    const { date } = req.query;
+    
+    if (!date) return res.status(400).json({ message: 'Date parameter is required' });
+    
+    const requestedDate = moment(date);
+    const startOfWeek = requestedDate.clone().startOf('week');
+    const endOfWeek = requestedDate.clone().endOf('week');
+    
+    // Obtener disponibilidad recurrente y no recurrente
+    const availability = await Availability.findAll({
+      where: {
+        ProfessionalId: id,
+        [Op.or]: [
+          { 
+            IsRecurring: true,
+            [Op.and]: [
+              { ValidFrom: { [Op.lte]: endOfWeek.format('YYYY-MM-DD') } },
+              { ValidTo: { [Op.gte]: startOfWeek.format('YYYY-MM-DD') } }
+            ]
+          },
+          { 
+            IsRecurring: false,
+            ValidFrom: { [Op.lte]: requestedDate.format('YYYY-MM-DD') },
+            ValidTo: { [Op.gte]: requestedDate.format('YYYY-MM-DD') }
+          }
+        ]
+      },
+      raw: true
+    });
+
+    // Preparar respuesta para el calendario
+    const calendarSlots = availability.map(slot => {
+      const isRecurring = slot.IsRecurring;
+      let dayOfWeek = null;
+      
+      if (isRecurring && slot.DayOfWeek) {
+        if (typeof slot.DayOfWeek === 'string') {
+          dayOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+            .indexOf(slot.DayOfWeek.toLowerCase());
+        } else {
+          dayOfWeek = slot.DayOfWeek;
         }
-        
-        const requestedDate = moment(date);
-        const dayOfWeek = requestedDate.format('dddd').toLowerCase(); // 'monday', 'tuesday', etc.
-        
-        // 1. Get availability (both recurring and specific)
-        const availability = await Availability.findAll({
-            where: { 
-                ProfessionalId: id,
-                [Op.or]: [
-                    { 
-                        DayOfWeek: dayOfWeek,
-                        IsRecurring: true
-                    },
-                    {
-                        ValidFrom: requestedDate.format('YYYY-MM-DD'),
-                        IsRecurring: false
-                    }
-                ]
-            },
-            raw: true
-        });
+      }
 
-        // 2. Get appointments for the date
-        const appointments = await db.appointments.findAll({
-            where: {
-                ProfessionalId: id,
-                StartTime: {
-                    [Op.between]: [
-                        requestedDate.startOf('day').toDate(),
-                        requestedDate.endOf('day').toDate()
-                    ]
-                }
-            },
-            raw: true
-        });
+      return {
+        AvailabilityId: slot.AvailabilityId,
+        title: isRecurring ? 'Available (Recurring)' : 'Available (One-time)',
+        StartTime: slot.StartTime,
+        EndTime: slot.EndTime,
+        IsRecurring: isRecurring,
+        daysOfWeek: isRecurring && slot.DayOfWeek !== null ? [dayOfWeek] : null,
+        start: !isRecurring ? `${date}T${slot.StartTime}` : null,
+        end: !isRecurring ? `${date}T${slot.EndTime}` : null,
+        startRecur: isRecurring ? slot.ValidFrom : null,
+        endRecur: isRecurring ? slot.ValidTo : null,
+        extendedProps: {
+          type: 'availability',
+          isRecurring: isRecurring
+        }
+      };
+    });
 
-        // 3. Format calendar slots
-        const calendarSlots = availability.map(slot => ({
-            id: slot.AvailabilityId,
-            title: 'Available',
-            start: `${date}T${slot.StartTime}`,
-            end: `${date}T${slot.EndTime}`,
-            backgroundColor: 'rgba(14, 165, 233, 0.1)',
-            borderColor: 'rgba(14, 165, 233, 0.8)',
-            textColor: '#0ea5e9',
-            extendedProps: {
-                type: 'availability'
-            }
-        }));
-
-        res.json({ 
-            recurring: availability.filter(s => s.IsRecurring),
-            calendar: calendarSlots 
-        });
-        
-    } catch (error) {
-        console.error('Error in getProfessionalAvailability:', error);
-        next(error);
-    }
+    res.json({ 
+      recurring: availability.filter(s => s.IsRecurring),
+      calendar: calendarSlots
+    });
+  } catch (error) {
+    next(error);
+  }
 };
 
 exports.deleteAvailability = async (req, res, next) => {
-    try {
-        const { id, slotId } = req.params;
+  try {
+    const { id, slotId } = req.params;
 
-        if (req.user.role !== 'admin' && req.user.UserId !== +id) {
-            return res.status(403).json({ message: 'Not authorized' });
-        }
-
-        const availability = await Availability.findOne({ where: { id: slotId, ProfessionalId: id } });
-        if (!availability) {
-            return res.status(404).json({ message: 'Availability slot not found' });
-        }
-
-        await availability.destroy();
-        res.status(200).json({ message: 'Availability slot deleted' });
-    } catch (error) {
-        console.error('Delete availability error:', error);
-        res.status(500).json({ message: 'Server error while deleting availability' });
-        next(error);
+    if (req.user.role !== 'admin' && req.user.UserId !== +id) {
+      return res.status(403).json({ message: 'Not authorized' });
     }
+
+    const availability = await Availability.findOne({ where: { AvailabilityId: slotId, ProfessionalId: id } });
+    if (!availability) {
+      return res.status(404).json({ message: 'Availability slot not found' });
+    }
+
+    await availability.destroy();
+    res.status(200).json({ message: 'Availability slot deleted' });
+  } catch (error) {
+    console.error('Delete availability error:', error);
+    res.status(500).json({ message: 'Server error while deleting availability', error: error.message });
+    next(error);
+  }
 };
 
 exports.updateAvailability = async (req, res, next) => {
