@@ -53,6 +53,13 @@ module.exports = function(sequelize, DataTypes) {
           { name: "Email" },
         ]
       },
+      {
+        name: "idx_users_email",
+        using: "BTREE",
+        fields: [
+          { name: "Email" },
+        ]
+      },
     ]
   });
 };

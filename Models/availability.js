@@ -17,7 +17,7 @@ module.exports = function(sequelize, DataTypes) {
     },
     DayOfWeek: {
       type: DataTypes.ENUM('monday','tuesday','wednesday','thursday','friday','saturday','sunday'),
-      allowNull: false
+      allowNull: true
     },
     StartTime: {
       type: DataTypes.TIME,

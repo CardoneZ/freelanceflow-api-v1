@@ -39,9 +39,17 @@ exports.createReview = async (req, res, next) => {
 exports.getProfessionalReviews = async (req, res, next) => {
   try {
     const { page = 1, limit = 10 } = req.query;
-    const offset = (page - 1) * limit;
+    const parsedPage = parseInt(page, 10);
+    const parsedLimit = parseInt(limit, 10);
+    const offset = (parsedPage - 1) * parsedLimit;
 
-    const reviews = await db.reviews.findAll({
+    if (isNaN(parsedPage) || isNaN(parsedLimit) || parsedPage < 1 || parsedLimit < 1) {
+      return res.status(400).json({ message: 'Invalid page or limit parameters' });
+    }
+
+    console.log('Fetching reviews for ProfessionalId:', req.params.id, 'Page:', parsedPage, 'Limit:', parsedLimit);
+
+    const { count, rows } = await db.reviews.findAndCountAll({
       where: { ProfessionalId: req.params.id },
       include: [
         {
@@ -63,11 +71,13 @@ exports.getProfessionalReviews = async (req, res, next) => {
       ],
       order: [['createdAt', 'DESC']],
       offset,
-      limit
+      limit: parsedLimit
     });
 
-    res.json(reviews);
+    console.log('Reviews fetched:', rows.length, 'Total:', count);
+    res.json({ reviews: rows, totalReviews: count });
   } catch (error) {
+    console.error('Error in getProfessionalReviews:', error.message, error.stack);
     next(error);
   }
 };

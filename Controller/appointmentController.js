@@ -109,42 +109,44 @@ exports.getAllAppointments = async (req, res, next) => {
 
 // Optimizar getUpcomingAppointments
 exports.getUpcomingAppointments = async (req, res, next) => {
-  try {
-    const where = { 
-      [Op.or]: [
-        { ClientId: req.user.UserId },
-        { ProfessionalId: req.user.UserId } // Más directo ahora
-      ],
-      StartTime: { [Op.gte]: new Date() },
-      Status: { [Op.in]: ['pending', 'confirmed'] }
-    };
+    try {
+        const where = { 
+            ProfessionalId: req.user.UserId, // Restrict to professional's appointments
+            StartTime: { [Op.gte]: new Date() },
+            Status: { [Op.in]: ['pending', 'confirmed'] }
+        };
 
-    const appointments = await db.appointments.findAll({
-      where,
-      include: [
-        {
-          model: db.services,
-          as: 'Service',
-          attributes: ['ServiceId', 'Name']
-        },
-        {
-          model: db.clients,
-          as: 'Client',
-          include: [{
-            model: db.users,
-            as: 'User',
-            attributes: ['FirstName', 'LastName', 'ProfilePicture']
-          }]
-        }
-      ],
-      order: [['StartTime', 'ASC']],
-      limit: 5
-    });
+        const appointments = await db.appointments.findAll({
+            where,
+            include: [
+                {
+                    model: db.services,
+                    as: 'Service',
+                    attributes: ['ServiceId', 'Name']
+                },
+                {
+                    model: db.clients,
+                    as: 'Client',
+                    include: [{
+                        model: db.users,
+                        as: 'User',
+                        attributes: ['FirstName', 'LastName', 'ProfilePicture']
+                    }]
+                }
+            ],
+            order: [['StartTime', 'ASC']],
+            limit: 5
+        });
 
-    res.json(appointments);
-  } catch (error) {
-    next(error);
-  }
+        res.json(appointments.map(appt => ({
+            serviceName: appt.Service.Name,
+            StartTime: appt.StartTime,
+            duration: appt.DurationMinutes,
+            clientName: `${appt.Client.User.FirstName} ${appt.Client.User.LastName}`
+        })));
+    } catch (error) {
+        next(error);
+    }
 };
 
 /* ═════════ util – calcular slots disponibles ═════════ */

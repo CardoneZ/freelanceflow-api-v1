@@ -29,4 +29,12 @@ router.put(
   ctrl.updateProfessional
 );
 
+router.get('/:id/stats', 
+    auth.authenticate, 
+     auth.authorize([roles.ADMIN, roles.PROFESSIONAL]),
+     ctrl.getProfessionalStats
+);
+
+
+
 module.exports = router;

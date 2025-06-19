@@ -1,6 +1,7 @@
 const db = require('../Models');
 const { Op } = require('sequelize');
 
+
 exports.createProfessional = async (req, res, next) => {
   try {
     const { UserId, Title, Bio, HourlyRate, Location } = req.body;
@@ -161,84 +162,78 @@ exports.getProfessionalServices = async (req, res, next) => {
   }
 };
 
-exports.getProfessionalStats = async (req, res, next) => {
+exports.getProfessionalStats = async (req, res) => {
   try {
-    const proId = req.params.id;
+    const professionalId = req.params.id;
 
-    // Rango de "hoy"
-    const todayStart = new Date(); 
+    const totalAppointments = await db.appointments.count({
+      where: { ProfessionalId: professionalId }
+    });
+
+    const earnings = await db.appointments.findAll({
+      include: [
+        {
+          model: db.services,
+          as: 'Service', 
+          attributes: ['Price']
+        }
+      ],
+      where: { 
+        ProfessionalId: professionalId,
+        Status: 'completed' 
+      },
+      raw: true
+    });
+
+    const totalEarnings = earnings.reduce((sum, appt) => {
+      return sum + (parseFloat(appt['Service.Price'] || 0) || 0);
+    }, 0);
+
+    const reviews = await db.reviews.findAll({
+      where: { ProfessionalId: professionalId },
+      attributes: [
+        [db.sequelize.fn('AVG', db.sequelize.col('Rating')), 'avgRating']
+      ],
+      raw: true
+    });
+
+    const averageRating = reviews[0]?.avgRating || 0;
+
+    const formattedAvgRating = parseFloat(averageRating).toFixed(1);
+
+
+    const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
-    const todayEnd = new Date(); 
+
+    const todayEnd = new Date();
     todayEnd.setHours(23, 59, 59, 999);
 
-    // 1. Total de citas del profesional
-    const totalAppointments = await db.appointments.count({
-      include: [{
-        model: db.services,
-        as: 'Service',
-        where: { ProfessionalId: proId },
-        attributes: []
-      }]
-    });
-
-    // 2. Citas de HOY
     const upcomingToday = await db.appointments.count({
-      where: { 
-        StartTime: { [Op.between]: [todayStart, todayEnd] },
-        Status: { [Op.not]: 'cancelled' }
-      },
-      include: [{
-        model: db.services,
-        as: 'Service',
-        where: { ProfessionalId: proId },
-        attributes: []
-      }]
-    });
-
-    // 3. Ganancias totales
-    const earnings = await db.appointments.findOne({
-      attributes: [
-        [fn('COALESCE',
-            fn('SUM',
-               literal('`Service`.`Price` * (`appointments`.`DurationMinutes` / 60)')
-            ), 0),
-         'total']
-      ],
-      where: { Status: 'completed' },
-      include: [{
-        model: db.services,
-        as: 'Service',
-        where: { ProfessionalId: proId },
-        attributes: []
-      }],
-      raw: true
-    });
-
-    // 4. Rating promedio
-    const avg = await db.reviews.findOne({
-      attributes: [[fn('COALESCE', fn('AVG', col('Rating')), 'avg')]],
-      include: [{
-        model: db.appointments,
-        as: 'Appointment',
-        attributes: [],
-        include: [{
-          model: db.services,
-          as: 'Service',
-          where: { ProfessionalId: proId },
-          attributes: []
-        }]
-      }],
-      raw: true
+      where: {
+        ProfessionalId: professionalId,
+        StartTime: {
+          [db.Sequelize.Op.between]: [todayStart, todayEnd]
+        },
+        Status: 'confirmed'
+      }
     });
 
     res.json({
-      totalAppointments,
-      upcomingToday,
-      totalEarnings: Number(earnings.total),
-      averageRating: Number(avg.avg)
+      success: true,
+      stats: {
+        totalAppointments,
+        totalEarnings: totalEarnings.toFixed(2),
+        averageRating: formattedAvgRating, 
+        upcomingToday
+      }
     });
 
   } catch (error) {
-    next(error);
+    console.error('Error getting professional stats:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Error getting professional stats',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };

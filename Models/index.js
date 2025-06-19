@@ -56,33 +56,32 @@ const has = m => Boolean(m);
 
 /* Users ↔ Clients / Professionals */
 if (has(users) && has(clients)) {
-  users.hasOne(clients, { as: 'Client',        foreignKey: 'ClientId' });
-  clients.belongsTo(users, { as: 'User',        foreignKey: 'ClientId' });
+  users.hasOne(clients, { as: 'Client', foreignKey: 'ClientId' });
+  clients.belongsTo(users, { as: 'User', foreignKey: 'ClientId' });
 }
 if (has(users) && has(professionals)) {
-  users.hasOne(professionals, { as: 'Professional', foreignKey: 'ProfessionalId' });
-  professionals.belongsTo(users, { as: 'User',      foreignKey: 'ProfessionalId' });
+  users.hasOne(professionals, { as: 'Professional', foreignKey: 'UserId' });
+  professionals.belongsTo(users, { as: 'User', foreignKey: 'UserId' });
 }
 
 /* Service ↔ Professional */
 if (has(professionals) && has(services)) {
-  professionals.hasMany(services, { as: 'services',   foreignKey: 'ProfessionalId' });
+  professionals.hasMany(services, { as: 'services', foreignKey: 'ProfessionalId' });
   services.belongsTo(professionals, { as: 'Professional', foreignKey: 'ProfessionalId' });
 }
 
 /* Appointment ↔ Service / Client */
 if (has(services) && has(appointments)) {
   services.hasMany(appointments, { as: 'Appointments', foreignKey: 'ServiceId' });
-  appointments.belongsTo(services, { as: 'Service',    foreignKey: 'ServiceId' });
+  appointments.belongsTo(services, { as: 'Service', foreignKey: 'ServiceId' });
 }
 if (has(clients) && has(appointments)) {
   clients.hasMany(appointments, { as: 'Appointments', foreignKey: 'ClientId' });
-  appointments.belongsTo(clients, { as: 'Client',     foreignKey: 'ClientId' });
+  appointments.belongsTo(clients, { as: 'Client', foreignKey: 'ClientId' });
 }
 
-
 /* Appointment ↔ Professional */
-if (has(professionals)){
+if (has(professionals)) {
   professionals.hasMany(appointments, { 
     as: 'Appointments', 
     foreignKey: 'ProfessionalId' 
@@ -101,7 +100,7 @@ if (has(professionals) && has(availability)) {
 
 /* Reviews ↔ Appointment / Professional / Client */
 if (has(appointments) && has(reviews))
-  appointments.hasOne(reviews, { as: 'Review',      foreignKey: 'AppointmentId' });
+  appointments.hasOne(reviews, { as: 'Review', foreignKey: 'AppointmentId' });
 if (has(reviews) && has(appointments))
   reviews.belongsTo(appointments, { as: 'Appointment', foreignKey: 'AppointmentId' });
 

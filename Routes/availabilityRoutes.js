@@ -23,4 +23,11 @@ router.put(
   ctrl.updateAvailability
 );
 
+router.delete(
+    '/:id/:slotId',
+    auth.authenticate,
+    auth.authorize([roles.ADMIN, roles.PROFESSIONAL]),
+    ctrl.deleteAvailability
+);
+
 module.exports = router;

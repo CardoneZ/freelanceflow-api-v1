@@ -34,29 +34,31 @@ CREATE TABLE Users (
 
 /* ------------------ PROFESSIONALS ------------------ */
 CREATE TABLE Professionals (
-  ProfessionalId INT UNSIGNED NOT NULL,
+  ProfessionalId INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  UserId         INT UNSIGNED NOT NULL,
   Title          VARCHAR(100),
   Bio            TEXT,
   HourlyRate     DECIMAL(10,2),
   Location       VARCHAR(100),
   createdAt      DATETIME DEFAULT CURRENT_TIMESTAMP,
   updatedAt      DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (ProfessionalId),
   CONSTRAINT fk_prof_user
-    FOREIGN KEY (ProfessionalId) REFERENCES Users(UserId)
-    ON DELETE RESTRICT ON UPDATE CASCADE
+    FOREIGN KEY (UserId) REFERENCES Users(UserId)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT uq_prof_user UNIQUE (UserId)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 /* --------------------- CLIENTS --------------------- */
 CREATE TABLE Clients (
-  ClientId INT UNSIGNED NOT NULL,
+  ClientId INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  UserId   INT UNSIGNED NOT NULL,
   Phone    VARCHAR(50),
   createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
   updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (ClientId),
   CONSTRAINT fk_client_user
-    FOREIGN KEY (ClientId) REFERENCES Users(UserId)
-    ON DELETE RESTRICT ON UPDATE CASCADE
+    FOREIGN KEY (UserId) REFERENCES Users(UserId)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT uq_client_user UNIQUE (UserId)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 /* -------------------- SERVICES -------------------- */
@@ -81,7 +83,7 @@ CREATE TABLE Services (
 CREATE TABLE Appointments (
   AppointmentId   INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   ServiceId       INT UNSIGNED NOT NULL,
-  ProfessionalId  INT UNSIGNED NOT NULL,  -- Nueva columna agregada
+  ProfessionalId  INT UNSIGNED NOT NULL,
   ClientId        INT UNSIGNED NOT NULL,
   StartTime       DATETIME     NOT NULL,
   DurationMinutes INT UNSIGNED NOT NULL,
@@ -94,8 +96,8 @@ CREATE TABLE Appointments (
   updatedAt       DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   KEY idx_appt_service (ServiceId),
   KEY idx_appt_client  (ClientId),
-  KEY idx_appt_professional (ProfessionalId),  -- Nuevo índice agregado
-  KEY idx_appt_start_time (StartTime),         -- Nuevo índice para búsquedas por fecha
+  KEY idx_appt_professional (ProfessionalId),
+  KEY idx_appt_start_time (StartTime),
   CONSTRAINT fk_appt_service
     FOREIGN KEY (ServiceId) REFERENCES Services(ServiceId)
     ON DELETE CASCADE ON UPDATE CASCADE,
@@ -111,8 +113,8 @@ CREATE TABLE Appointments (
 CREATE TABLE Reviews (
   ReviewId      INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   AppointmentId INT UNSIGNED NOT NULL,
-  ProfessionalId INT UNSIGNED NOT NULL,  -- Nueva columna agregada
-  ClientId      INT UNSIGNED NOT NULL,   -- Nueva columna agregada
+  ProfessionalId INT UNSIGNED NOT NULL,
+  ClientId      INT UNSIGNED NOT NULL,
   Rating        TINYINT UNSIGNED NOT NULL,
   Comment       TEXT,
   createdAt     DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -134,15 +136,20 @@ CREATE TABLE Reviews (
 CREATE TABLE Availability (
   AvailabilityId INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   ProfessionalId INT UNSIGNED NOT NULL,
-  DayOfWeek ENUM('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday') NOT NULL,
+  DayOfWeek ENUM('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday') NULL,
   StartTime TIME NOT NULL,
   EndTime TIME NOT NULL,
   IsRecurring TINYINT(1) DEFAULT 1,
-  ValidFrom DATE,  
-  ValidTo DATE,
+  ValidFrom DATE NULL,
+  ValidTo DATE NULL,
   createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
   updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_availability_professional
     FOREIGN KEY (ProfessionalId) REFERENCES Professionals(ProfessionalId)
     ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+/* ----------------- INDEXES ----------------- */
+CREATE INDEX idx_users_email ON Users(Email);
+CREATE INDEX idx_professionals_user ON Professionals(UserId);
+CREATE INDEX idx_clients_user ON Clients(UserId);

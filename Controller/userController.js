@@ -53,28 +53,97 @@ exports.getUserById = async (req, res, next) => {
 
 
 exports.updateUser = async (req, res, next) => {
+  const transaction = await db.sequelize.transaction();
+  
   try {
     const { id } = req.params;
-    const { PasswordHash, ...updateData } = req.body;
+    const { firstName, lastName, email, professionalInfo } = req.body;
 
-    const user = await db.users.findByPk(id);
+    // Find the user with their professional info
+    const user = await db.users.findByPk(id, { 
+      include: [{
+        model: db.professionals,
+        as: 'Professional',
+        required: false
+      }],
+      transaction
+    });
+
     if (!user) {
+      await transaction.rollback();
       return res.status(404).json({ message: 'User not found' });
     }
 
-    if (PasswordHash) {
-      updateData.PasswordHash = await bcrypt.hash(PasswordHash, 12);
+    // Update basic user info
+    await user.update({
+      FirstName: firstName,
+      LastName: lastName,
+      Email: email
+    }, { transaction });
+
+    // Handle professional info
+    if (user.Role === 'professional') {
+      if (user.Professional) {
+        // Update existing professional record
+        await user.Professional.update({
+          Title: professionalInfo.title,
+          Bio: professionalInfo.bio,
+          HourlyRate: professionalInfo.hourlyRate,
+          Location: professionalInfo.location
+        }, { transaction });
+      } else {
+        // Create new professional record
+        await db.professionals.create({
+          UserId: user.UserId,
+          Title: professionalInfo.title,
+          Bio: professionalInfo.bio,
+          HourlyRate: professionalInfo.hourlyRate,
+          Location: professionalInfo.location
+        }, { transaction });
+      }
     }
 
-    await user.update(updateData);
+    // Commit transaction
+    await transaction.commit();
 
+    // Fetch updated user data with associations
     const updatedUser = await db.users.findByPk(id, {
-      attributes: { exclude: ['PasswordHash'] }
+      attributes: { exclude: ['PasswordHash'] },
+      include: [
+        {
+          model: db.professionals,
+          as: 'Professional',
+          required: false
+        }
+      ]
     });
 
-    res.json(updatedUser);
+    res.json({
+      success: true,
+      user: {
+        id: updatedUser.UserId,
+        firstName: updatedUser.FirstName,
+        lastName: updatedUser.LastName,
+        email: updatedUser.Email,
+        profilePicture: updatedUser.ProfilePicture,
+        role: updatedUser.Role,
+        professionalInfo: updatedUser.Professional ? {
+          title: updatedUser.Professional.Title,
+          bio: updatedUser.Professional.Bio,
+          hourlyRate: updatedUser.Professional.HourlyRate,
+          location: updatedUser.Professional.Location
+        } : null
+      }
+    });
+    
   } catch (error) {
-    next(error);
+    await transaction.rollback();
+    console.error('Update error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Error updating profile',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };
 
