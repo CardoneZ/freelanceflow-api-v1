@@ -1,33 +1,40 @@
-const express     = require('express');
-const router      = express.Router();
+const express = require('express');
+const router = express.Router();
 
-const ctrl        = require('../Controller/availabilityController');
-const auth        = require('../Middlewares/authMiddleware');
-const roles       = require('../constants/roles');              // ← NEW
+const ctrl = require('../Controller/availabilityController');
+const auth = require('../Middlewares/authMiddleware');
+const roles = require('../Constants/roles');
 
 /* públicas */
-router.get('/:id', ctrl.getProfessionalAvailability);
+router.get('/:professionalId', ctrl.getProfessionalAvailability);
 
 /* protegidas */
 router.post(
-  '/:id',
+  '/:professionalId',
   auth.authenticate,
-  auth.authorize([roles.ADMIN, roles.PROFESSIONAL]),            // 👈
+  auth.authorize([roles.ADMIN, roles.PROFESSIONAL]),
   ctrl.createAvailability
 );
 
 router.put(
-  '/:id',
+  '/:professionalId/:slotId',
   auth.authenticate,
-  auth.authorize([roles.ADMIN, roles.PROFESSIONAL]),            // 👈
+  auth.authorize([roles.ADMIN, roles.PROFESSIONAL]),
   ctrl.updateAvailability
 );
 
 router.delete(
-    '/:id/:slotId',
-    auth.authenticate,
-    auth.authorize([roles.ADMIN, roles.PROFESSIONAL]),
-    ctrl.deleteAvailability
+  '/:professionalId/:slotId',
+  auth.authenticate,
+  auth.authorize([roles.ADMIN, roles.PROFESSIONAL]),
+  ctrl.deleteAvailability
+);
+
+router.get(
+  '/:professionalId/:slotId',
+  auth.authenticate,
+  auth.authorize([roles.ADMIN, roles.PROFESSIONAL]),
+  ctrl.getAvailabilitySlot
 );
 
 module.exports = router;

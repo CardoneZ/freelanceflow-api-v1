@@ -7,20 +7,22 @@ const Availability = db.availability;
 // availabilityController.js
 exports.createAvailability = async (req, res, next) => {
   try {
-    const { id } = req.params;
+    const { professionalId } = req.params;
     const { availability } = req.body;
 
-    if (req.user.role !== 'admin' && req.user.UserId !== +id) {
+    console.log('Create availability request:', { professionalId, availability });
+
+    if (req.user.role !== 'admin' && req.user.UserId !== +professionalId) {
       return res.status(403).json({ message: 'Not authorized' });
     }
     
-    const professional = await db.professionals.findByPk(id);
+    const professional = await db.professionals.findByPk(professionalId);
     if (!professional) {
       return res.status(404).json({ message: 'Professional not found' });
     }
 
-    // Validación mejorada
     for (let slot of availability) {
+      console.log('Validating slot:', slot);
       if (!slot.StartTime || !slot.EndTime) {
         return res.status(400).json({ message: 'Missing required fields: StartTime or EndTime' });
       }
@@ -32,17 +34,25 @@ exports.createAvailability = async (req, res, next) => {
       }
     }
 
-    const formattedAvailability = availability.map(slot => ({
-      ProfessionalId: id,
-      DayOfWeek: slot.IsRecurring ? slot.DayOfWeek : null, // Accept number or string
-      StartTime: slot.StartTime,
-      EndTime: slot.EndTime,
-      IsRecurring: slot.IsRecurring,
-      ValidFrom: slot.ValidFrom || new Date().toISOString().split('T')[0],
-      ValidTo: slot.IsRecurring ? (slot.ValidTo || '2025-12-31') : slot.ValidTo
-    }));
+    const formattedAvailability = availability.map(slot => {
+      const dayOfWeek = slot.IsRecurring ? (typeof slot.DayOfWeek === 'string' ? 
+        ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+          .indexOf(slot.DayOfWeek.toLowerCase()) : slot.DayOfWeek) : null;
+      const formattedSlot = {
+        ProfessionalId: professionalId,
+        DayOfWeek: dayOfWeek,
+        StartTime: slot.StartTime,
+        EndTime: slot.EndTime,
+        IsRecurring: slot.IsRecurring,
+        ValidFrom: slot.ValidFrom || new Date().toISOString().split('T')[0],
+        ValidTo: slot.IsRecurring ? (slot.ValidTo || '2025-12-31') : slot.ValidTo
+      };
+      console.log('Formatted slot:', formattedSlot);
+      return formattedSlot;
+    });
 
     const newAvailability = await Availability.bulkCreate(formattedAvailability);
+    console.log('Created availability:', newAvailability);
     res.status(201).json(newAvailability);
   } catch (error) {
     console.error('Create availability error:', error);
@@ -53,48 +63,47 @@ exports.createAvailability = async (req, res, next) => {
 
 // Función para calcular slots disponibles
 function calculateAvailableSlots(availability, appointments, duration, date) {
-    const slots = [];
-    const durationInMinutes = parseInt(duration) || 60;
+  const slots = [];
+  const durationInMinutes = parseInt(duration) || 60;
+  
+  availability.forEach(slot => {
+    const start = moment(`${date}T${slot.StartTime}`);
+    const end = moment(`${date}T${slot.EndTime}`);
     
-    availability.forEach(slot => {
-        const start = moment(`${date}T${slot.StartTime}`);
-        const end = moment(`${date}T${slot.EndTime}`);
-        
-        let currentStart = moment(start);
-        
-        while (currentStart.clone().add(durationInMinutes, 'minutes').isSameOrBefore(end)) {
-            const slotEnd = currentStart.clone().add(durationInMinutes, 'minutes');
-            
-            // Verificar que no choque con citas existentes
-            const isAvailable = !appointments.some(appt => {
-                const apptStart = moment(appt.StartTime);
-                const apptEnd = moment(appt.EndTime);
-                return currentStart.isBefore(apptEnd) && slotEnd.isAfter(apptStart);
-            });
-            
-            if (isAvailable) {
-                slots.push({
-                    id: `slot-${slot.id}-${currentStart.format('HHmm')}`,
-                    start: currentStart.toISOString(),
-                    end: slotEnd.toISOString(),
-                    title: 'Available',
-                    extendedProps: {
-                        type: 'availability',
-                        slotId: slot.id
-                    }
-                });
-            }
-            
-            currentStart.add(30, 'minutes'); // Espacio entre slots
-        }
-    });
+    let currentStart = moment(start);
     
-    return slots;
+    while (currentStart.clone().add(durationInMinutes, 'minutes').isSameOrBefore(end)) {
+      const slotEnd = currentStart.clone().add(durationInMinutes, 'minutes');
+      
+      const isAvailable = !appointments.some(appt => {
+        const apptStart = moment(appt.StartTime);
+        const apptEnd = moment(appt.EndTime);
+        return currentStart.isBefore(apptEnd) && slotEnd.isAfter(apptStart);
+      });
+      
+      if (isAvailable) {
+        slots.push({
+          id: `slot-${slot.id}-${currentStart.format('HHmm')}`,
+          start: currentStart.toISOString(),
+          end: slotEnd.toISOString(),
+          title: 'Available',
+          extendedProps: {
+            type: 'availability',
+            slotId: slot.id
+          }
+        });
+      }
+      
+      currentStart.add(30, 'minutes');
+    }
+  });
+  
+  return slots;
 }
 
 exports.getProfessionalAvailability = async (req, res, next) => {
   try {
-    const { id } = req.params;
+    const { professionalId } = req.params;
     const { date } = req.query;
     
     if (!date) return res.status(400).json({ message: 'Date parameter is required' });
@@ -103,10 +112,9 @@ exports.getProfessionalAvailability = async (req, res, next) => {
     const startOfWeek = requestedDate.clone().startOf('week');
     const endOfWeek = requestedDate.clone().endOf('week');
     
-    // Obtener disponibilidad recurrente y no recurrente
     const availability = await Availability.findAll({
       where: {
-        ProfessionalId: id,
+        ProfessionalId: professionalId,
         [Op.or]: [
           { 
             IsRecurring: true,
@@ -125,12 +133,11 @@ exports.getProfessionalAvailability = async (req, res, next) => {
       raw: true
     });
 
-    // Preparar respuesta para el calendario
     const calendarSlots = availability.map(slot => {
       const isRecurring = slot.IsRecurring;
       let dayOfWeek = null;
       
-      if (isRecurring && slot.DayOfWeek) {
+      if (isRecurring && slot.DayOfWeek !== null) {
         if (typeof slot.DayOfWeek === 'string') {
           dayOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
             .indexOf(slot.DayOfWeek.toLowerCase());
@@ -140,16 +147,17 @@ exports.getProfessionalAvailability = async (req, res, next) => {
       }
 
       return {
-        AvailabilityId: slot.AvailabilityId,
+        id: slot.AvailabilityId,
         title: isRecurring ? 'Available (Recurring)' : 'Available (One-time)',
-        StartTime: slot.StartTime,
-        EndTime: slot.EndTime,
-        IsRecurring: isRecurring,
-        daysOfWeek: isRecurring && slot.DayOfWeek !== null ? [dayOfWeek] : null,
         start: !isRecurring ? `${date}T${slot.StartTime}` : null,
         end: !isRecurring ? `${date}T${slot.EndTime}` : null,
+        daysOfWeek: isRecurring ? [dayOfWeek] : null,
+        startTime: isRecurring ? slot.StartTime : null,
+        endTime: isRecurring ? slot.EndTime : null,
         startRecur: isRecurring ? slot.ValidFrom : null,
         endRecur: isRecurring ? slot.ValidTo : null,
+        backgroundColor: isRecurring ? 'rgba(16, 185, 129, 0.2)' : 'rgba(59, 130, 246, 0.2)',
+        borderColor: isRecurring ? 'rgba(16, 185, 129, 0.8)' : 'rgba(59, 130, 246, 0.8)',
         extendedProps: {
           type: 'availability',
           isRecurring: isRecurring
@@ -166,15 +174,45 @@ exports.getProfessionalAvailability = async (req, res, next) => {
   }
 };
 
-exports.deleteAvailability = async (req, res, next) => {
+exports.getAvailabilitySlot = async (req, res, next) => {
   try {
-    const { id, slotId } = req.params;
+    const { professionalId, slotId } = req.params;
 
-    if (req.user.role !== 'admin' && req.user.UserId !== +id) {
+    if (req.user.role !== 'admin' && req.user.UserId !== +professionalId) {
       return res.status(403).json({ message: 'Not authorized' });
     }
 
-    const availability = await Availability.findOne({ where: { AvailabilityId: slotId, ProfessionalId: id } });
+    const slot = await Availability.findOne({
+      where: {
+        AvailabilityId: slotId,
+        ProfessionalId: professionalId
+      },
+      raw: true
+    });
+
+    if (!slot) {
+      return res.status(404).json({ message: 'Availability slot not found' });
+    }
+
+    res.status(200).json(slot);
+  } catch (error) {
+    console.error('Get availability slot error:', error);
+    res.status(500).json({ message: 'Server error while fetching availability slot', error: error.message });
+    next(error);
+  }
+};
+
+exports.deleteAvailability = async (req, res, next) => {
+  try {
+    const { professionalId, slotId } = req.params;
+
+    console.log('Deleting slot:', { professionalId, slotId });
+
+    if (req.user.role !== 'admin' && req.user.UserId !== +professionalId) {
+      return res.status(403).json({ message: 'Not authorized' });
+    }
+
+    const availability = await Availability.findOne({ where: { AvailabilityId: slotId, ProfessionalId: professionalId } });
     if (!availability) {
       return res.status(404).json({ message: 'Availability slot not found' });
     }
@@ -190,32 +228,38 @@ exports.deleteAvailability = async (req, res, next) => {
 
 exports.updateAvailability = async (req, res, next) => {
   try {
-
-    const { id } = req.params;
+    const { professionalId, slotId } = req.params;
     const { availability } = req.body;
 
-    if (req.user.role !== 'admin' && req.user.UserId !== +id)
-      return res.status(403).json({ message:'Not authorized' });
+    console.log('Updating slot:', { professionalId, slotId, availability });
 
-    // Verificar que el profesional existe
-    const professional = await db.professionals.findByPk(id);
-    if (!professional) {
-      return res.status(404).json({ message: 'Professional not found' });
+    if (req.user.role !== 'admin' && req.user.UserId !== +professionalId) {
+      return res.status(403).json({ message: 'Not authorized' });
     }
 
-    // Eliminar disponibilidad existente
-    await Availability.destroy({ where: { ProfessionalId: id } });
+    const slot = await Availability.findOne({ where: { AvailabilityId: slotId, ProfessionalId: professionalId } });
+    if (!slot) {
+      return res.status(404).json({ message: 'Availability slot not found' });
+    }
 
-    // Crear nueva disponibilidad
-    const newAvailability = await Availability.bulkCreate(
-      availability.map(slot => ({ 
-        ProfessionalId: id,
-        ...slot 
-      }))
-    );
+    const dayOfWeek = availability[0].IsRecurring ? (typeof availability[0].DayOfWeek === 'string' ? 
+      ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+        .indexOf(availability[0].DayOfWeek.toLowerCase()) : availability[0].DayOfWeek) : null;
 
-    res.status(201).json(newAvailability);
+    const updateData = {
+      StartTime: availability[0].StartTime,
+      EndTime: availability[0].EndTime,
+      IsRecurring: availability[0].IsRecurring,
+      DayOfWeek: dayOfWeek,
+      ValidFrom: availability[0].ValidFrom,
+      ValidTo: availability[0].IsRecurring ? availability[0].ValidTo : availability[0].ValidFrom
+    };
+
+    await slot.update(updateData);
+    res.status(200).json(slot);
   } catch (error) {
+    console.error('Update availability error:', error);
+    res.status(500).json({ message: 'Server error while updating availability', error: error.message });
     next(error);
   }
 };
