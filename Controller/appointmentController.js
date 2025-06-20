@@ -436,6 +436,45 @@ exports.cancelAppointment = async (req, res, next) => {
   }
 };
 
+exports.getReviewableAppointments = async (req, res, next) => {
+  try {
+    const { clientId } = req.query;
+    
+    const appointments = await db.appointments.findAll({
+      where: { 
+        ClientId: clientId,
+        Status: 'completed',
+        '$Reviews.ReviewId$': null
+      },
+      include: [
+        {
+          model: db.services,
+          as: 'Service',
+          attributes: ['Name'],
+          include: [{
+            model: db.professionals,
+            as: 'Professional',
+            include: [{
+              model: db.users,
+              as: 'User',
+              attributes: ['FirstName', 'LastName']
+            }]
+          }]
+        },
+        {
+          model: db.reviews,
+          as: 'Reviews',
+          required: false
+        }
+      ]
+    });
+    
+    res.json({ appointments });
+  } catch (error) {
+    next(error);
+  }
+};
+
 exports.updateAppointmentStatus = async (req, res, next) => {
   console.log('Entering updateAppointmentStatus for appointment:', req.params.id); // Nuevo log
   try {

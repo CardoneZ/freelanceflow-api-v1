@@ -56,4 +56,9 @@ router.patch('/:id/cancel',
   apptCtrl.cancelAppointment
 );
 
+router.get('/reviewable', 
+  auth.authenticate, 
+  apptCtrl.getReviewableAppointments
+);
+
 module.exports = router;

@@ -82,6 +82,49 @@ exports.getProfessionalReviews = async (req, res, next) => {
   }
 };
 
+exports.getClientReviews = async (req, res, next) => {
+  try {
+    const { clientId } = req.params;
+    
+    const reviews = await db.reviews.findAll({
+      where: { ClientId: clientId },
+      include: [
+        {
+          model: db.professionals,
+          as: 'Professional',
+          include: [{
+            model: db.users,
+            as: 'User',
+            attributes: ['FirstName', 'LastName']
+          }]
+        },
+        {
+          model: db.appointments,
+          as: 'Appointment',
+          include: [{
+            model: db.services,
+            as: 'Service',
+            attributes: ['Name']
+          }]
+        }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+    
+    const totalReviews = reviews.length;
+    const averageRating = totalReviews > 0 ? 
+      reviews.reduce((sum, r) => sum + r.Rating, 0) / totalReviews : 0;
+    
+    res.json({
+      reviews,
+      totalReviews,
+      averageRating
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 exports.getReviewById = async (req, res, next) => {
   try {
     const review = await db.reviews.findByPk(req.params.id, {

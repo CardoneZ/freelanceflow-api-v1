@@ -8,5 +8,6 @@ router.get('/professional/:id', reviewController.getProfessionalReviews);  // Ob
 router.get('/:id', reviewController.getReviewById);  // Obtener una reseña específica
 router.put('/:id', authMiddleware.authenticate, reviewController.updateReview);  // Actualizar reseña
 router.delete('/:id', authMiddleware.authenticate, reviewController.deleteReview);  // Eliminar reseña
+router.get('/client/:clientId', authMiddleware.authenticate, reviewController.getClientReviews);
 
 module.exports = router;
