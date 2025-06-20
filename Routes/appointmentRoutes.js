@@ -3,7 +3,7 @@ const router = express.Router();
 
 const apptCtrl = require('../Controller/appointmentController');
 const auth = require('../Middlewares/authMiddleware');
-const roles = require('../constants/roles');
+const roles = require('../Constants/roles');
 
 // Endpoints protegidos
 router.post('/', 
@@ -43,6 +43,17 @@ router.patch('/:id/complete',
   auth.authenticate,
   auth.authorize([roles.PROFESSIONAL, roles.ADMIN]),
   apptCtrl.completeAppointment
+);
+
+router.get('/client/:clientId', 
+  auth.authenticate,
+  apptCtrl.getClientAppointments
+);
+
+router.patch('/:id/cancel',
+  auth.authenticate,
+  auth.authorize([roles.CLIENT]),
+  apptCtrl.cancelAppointment
 );
 
 module.exports = router;

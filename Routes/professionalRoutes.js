@@ -2,12 +2,13 @@ const express = require('express');
 const router = express.Router();
 const ctrl = require('../Controller/professionalController');
 const auth = require('../Middlewares/authMiddleware');
-const roles = require('../constants/roles');
+const roles = require('../Constants/roles');
 const availabilityController = require('../Controller/availabilityController');
 const appointmentController = require('../Controller/appointmentController');
 
 /* públicas */
-router.get('/', ctrl.getAllProfessionals);
+router.get('/', ctrl.getAllProfessionals); // Default endpoint for all professionals
+router.get('/clients', ctrl.getProfessionalsForClients); // New endpoint for clients
 router.get('/:id', ctrl.getProfessionalById);
 router.get('/:id/services', ctrl.getProfessionalServices);
 router.get('/:id/stats', ctrl.getProfessionalStats);
@@ -30,11 +31,9 @@ router.put(
 );
 
 router.get('/:id/stats', 
-    auth.authenticate, 
-     auth.authorize([roles.ADMIN, roles.PROFESSIONAL]),
-     ctrl.getProfessionalStats
+  auth.authenticate, 
+  auth.authorize([roles.ADMIN, roles.PROFESSIONAL]),
+  ctrl.getProfessionalStats
 );
-
-
 
 module.exports = router;

@@ -35,6 +35,36 @@ exports.getAllClients = async (req, res, next) => {
   }
 };
 
+exports.getClientByUserId = async (req, res, next) => {
+  try {
+    const client = await db.clients.findOne({
+      where: { UserId: req.params.userId },
+      include: [
+        {
+          model: db.users,
+          as: 'User',
+          attributes: ['UserId', 'FirstName', 'LastName', 'Email']
+        }
+      ]
+    });
+    
+    if (!client) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Client not found for this user' 
+      });
+    }
+    
+    res.json({
+      success: true,
+      ClientId: client.ClientId,
+      User: client.User
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 exports.getClientById = async (req, res, next) => {
   try {
     const { id } = req.params;

@@ -61,45 +61,6 @@ exports.createAvailability = async (req, res, next) => {
   }
 };
 
-// Función para calcular slots disponibles
-function calculateAvailableSlots(availability, appointments, duration, date) {
-  const slots = [];
-  const durationInMinutes = parseInt(duration) || 60;
-  
-  availability.forEach(slot => {
-    const start = moment(`${date}T${slot.StartTime}`);
-    const end = moment(`${date}T${slot.EndTime}`);
-    
-    let currentStart = moment(start);
-    
-    while (currentStart.clone().add(durationInMinutes, 'minutes').isSameOrBefore(end)) {
-      const slotEnd = currentStart.clone().add(durationInMinutes, 'minutes');
-      
-      const isAvailable = !appointments.some(appt => {
-        const apptStart = moment(appt.StartTime);
-        const apptEnd = moment(appt.EndTime);
-        return currentStart.isBefore(apptEnd) && slotEnd.isAfter(apptStart);
-      });
-      
-      if (isAvailable) {
-        slots.push({
-          id: `slot-${slot.id}-${currentStart.format('HHmm')}`,
-          start: currentStart.toISOString(),
-          end: slotEnd.toISOString(),
-          title: 'Available',
-          extendedProps: {
-            type: 'availability',
-            slotId: slot.id
-          }
-        });
-      }
-      
-      currentStart.add(30, 'minutes');
-    }
-  });
-  
-  return slots;
-}
 
 exports.getProfessionalAvailability = async (req, res, next) => {
   try {

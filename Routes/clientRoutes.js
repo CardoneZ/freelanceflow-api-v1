@@ -8,6 +8,11 @@ router.get('/', clientController.getAllClients);
 router.get('/:id', clientController.getClientById); 
 router.get('/:id/appointments', clientController.getClientAppointments); 
 
+// Add this new route
+router.get('/user/:userId', 
+  authMiddleware.authenticate,
+  clientController.getClientByUserId
+);
 
 /* Crear cliente 
 router.post('/',

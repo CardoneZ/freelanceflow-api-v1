@@ -91,6 +91,70 @@ exports.getAllProfessionals = async (req, res, next) => {
   }
 };
 
+exports.getProfessionalsForClients = async (req, res, next) => {
+  try {
+    console.log('Query Params:', req.query); // Debug incoming params
+    const { profession, search, service, location, page = 1, limit = 10 } = req.query;
+    const offset = (page - 1) * limit;
+    const where = {};
+
+    if (profession) where.Title = { [Op.like]: `%${profession}%` };
+    if (location) where.Location = { [Op.like]: `%${location}%` };
+
+    const include = [
+      {
+        model: db.users,
+        as: 'User',
+        attributes: ['UserId', 'FirstName', 'LastName', 'Email', 'ProfilePicture'],
+        required: false, // Use LEFT OUTER JOIN instead of INNER JOIN
+        where: search ? {
+          [Op.or]: [
+            { FirstName: { [Op.like]: `%${search}%` } },
+            { LastName: { [Op.like]: `%${search}%` } }
+          ]
+        } : {}
+      },
+      {
+        model: db.services,
+        as: 'services',
+        required: false,
+        where: service ? { Name: { [Op.like]: `%${service}%` } } : {}
+      }
+    ];
+
+    // Add search on Title and Bio to the main where clause
+    if (search) {
+      const searchConditions = [
+        { Title: { [Op.like]: `%${search}%` } },
+        { Bio: { [Op.like]: `%${search}%` } }
+      ];
+      if (where[Op.or]) {
+        where[Op.or] = where[Op.or].concat(searchConditions);
+      } else {
+        where[Op.or] = searchConditions;
+      }
+    }
+
+    const professionals = await db.professionals.findAll({
+      where,
+      include,
+      order: [['ProfessionalId', 'DESC']],
+      offset,
+      limit
+    });
+
+    console.log('Found professionals:', professionals); // Debug the results
+    if (!professionals || professionals.length === 0) {
+      return res.status(200).json([]); // Return empty array with 200 status
+    }
+    res.json(professionals);
+  } catch (error) {
+    console.error('Error in getProfessionalsForClients:', error);
+    next(error);
+  }
+};
+
+
 exports.getProfessionalById = async (req, res, next) => {
   try {
     const professional = await db.professionals.findByPk(req.params.id, {
@@ -107,7 +171,7 @@ exports.getProfessionalById = async (req, res, next) => {
         },
         {
           model: db.reviews,
-          as: 'reviews',
+          as: 'Reviews', 
           required: false,
           include: [
             {

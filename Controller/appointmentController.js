@@ -16,40 +16,50 @@ const checkDuration = (service, minutes) => {
 
 exports.createAppointment = async (req, res, next) => {
   try {
-    const { ServiceId, ClientId, StartTime, DurationMinutes, Notes } = req.body;
+    const { ServiceId, ProfessionalId, ClientId, StartTime, DurationMinutes, Notes } = req.body;
 
-    /* 1. servicio + cliente */
-    const service = await db.services.findByPk(ServiceId, {
-      include: [{ model: db.professionals, as: 'Professional' }]
-    });
+    // Validate required fields
+    if (!ServiceId || !ProfessionalId || !ClientId || !StartTime || !DurationMinutes) {
+      return res.status(400).json({ message: 'Missing required fields' });
+    }
+
+    // Verify service exists
+    const service = await db.services.findByPk(ServiceId);
     if (!service) return res.status(404).json({ message: 'Service not found' });
 
+    // Verify client exists
     const client = await db.clients.findByPk(ClientId);
     if (!client) return res.status(404).json({ message: 'Client not found' });
 
-    /* 2. duración correcta */
-    try { checkDuration(service, DurationMinutes); }
-    catch (err) { return res.status(400).json({ message: err.message }); }
-
-    /* 3. fechas */
-    const start = moment(StartTime);
-    if (!start.isValid()) return res.status(400).json({ message: 'Invalid date' });
-    const end = start.clone().add(DurationMinutes, 'minutes').toDate();
-
-    /* 4. crear con ProfessionalId */
-    const appt = await db.appointments.create({
+    // Create appointment WITHOUT EndTime
+    const appointment = await db.appointments.create({
       ServiceId,
-      ProfessionalId: service.Professional.ProfessionalId, // Añadido
+      ProfessionalId,
       ClientId,
-      StartTime: start.toDate(),
-      EndTime: end,
+      StartTime: new Date(StartTime),
       DurationMinutes,
       Status: 'pending',
-      Notes
+      Notes: Notes || null
     });
 
-    res.status(201).json(appt);
-  } catch (err) { next(err); }
+    // Devuelve un formato claro
+    res.status(201).json({
+      success: true,
+      data: {
+        id: appointment.AppointmentId,
+        startTime: appointment.StartTime,
+        duration: appointment.DurationMinutes
+      }
+    });
+
+  } catch (error) {
+    console.error('Error creating appointment:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create appointment',
+      error: error.message // Solo para desarrollo
+    });
+  }
 };
 
 // Optimizar getAllAppointments
@@ -104,6 +114,54 @@ exports.getAllAppointments = async (req, res, next) => {
   } catch (error) {
     console.error('Error en getAllAppointments:', error);
     next(error);
+  }
+};
+
+exports.getClientAppointments = async (req, res) => {
+  try {
+    const { clientId } = req.params;
+    const { dateFrom, dateTo, status } = req.query;
+    
+    const where = { ClientId: clientId };
+    
+    if (dateFrom || dateTo) {
+      where.StartTime = {};
+      if (dateFrom) where.StartTime[Op.gte] = new Date(dateFrom);
+      if (dateTo) where.StartTime[Op.lte] = new Date(dateTo);
+    }
+    
+    if (status) where.Status = status;
+    
+    const appointments = await db.appointments.findAll({
+      where,
+      include: [
+        {
+          model: db.services,
+          as: 'Service',
+          attributes: ['ServiceId', 'Name']
+        },
+        {
+          model: db.professionals,
+          as: 'Professional',
+          include: [{
+            model: db.users,
+            as: 'User',
+            attributes: ['FirstName', 'LastName']
+          }]
+        }
+      ],
+      order: [['StartTime', 'ASC']]
+    });
+    
+    res.json({
+      success: true,
+      data: appointments
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching appointments'
+    });
   }
 };
 
