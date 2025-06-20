@@ -52,7 +52,7 @@ router.get('/client/:clientId',
 
 router.patch('/:id/cancel',
   auth.authenticate,
-  auth.authorize([roles.CLIENT]),
+  auth.authorize(['client', 'admin']),
   apptCtrl.cancelAppointment
 );
 

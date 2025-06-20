@@ -88,11 +88,23 @@ exports.getClientById = async (req, res, next) => {
   }
 };
 
+
 exports.getClientAppointments = async (req, res, next) => {
   try {
     const { status, upcoming } = req.query;
     const where = { ClientId: req.params.id };
     
+    // Verify the requesting user owns this client profile
+    const client = await db.clients.findByPk(req.params.id);
+    if (!client) {
+      return res.status(404).json({ message: 'Client not found' });
+    }
+
+    // Check if the authenticated user matches this client's UserId
+    if (client.UserId !== req.user.UserId && req.user.Role !== 'admin') {
+      return res.status(403).json({ message: 'Not authorized' });
+    }
+
     if (status) where.Status = status;
     if (upcoming === 'true') {
       where.StartTime = { [Op.gte]: new Date() };

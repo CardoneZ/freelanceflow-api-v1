@@ -407,7 +407,10 @@ exports.cancelAppointment = async (req, res, next) => {
       return res.status(404).json({ message: 'Appointment not found' });
     }
 
-    // Verificar si la cita puede ser cancelada (ej. no dentro de 24 horas)
+    // Log appointment details for debugging
+    console.log('Attempting to cancel appointment:', appointment.toJSON());
+
+    // Verify if the appointment can be cancelled (e.g., not within 24 hours)
     const now = moment();
     const appointmentTime = moment(appointment.StartTime);
     const hoursDifference = appointmentTime.diff(now, 'hours');
@@ -416,9 +419,19 @@ exports.cancelAppointment = async (req, res, next) => {
       return res.status(400).json({ message: 'Appointments can only be cancelled at least 24 hours in advance' });
     }
 
-    await appointment.update({ Status: 'cancelled' });
-    res.json(appointment);
+    // Ensure the status update is valid
+    if (!['pending', 'confirmed'].includes(appointment.Status)) {
+      return res.status(400).json({ message: 'Only pending or confirmed appointments can be cancelled' });
+    }
+
+    // Perform the update within a transaction to handle potential issues
+    await db.sequelize.transaction(async (t) => {
+      await appointment.update({ Status: 'cancelled' }, { transaction: t });
+    });
+
+    res.json({ success: true, message: 'Appointment cancelled successfully', data: appointment });
   } catch (error) {
+    console.error('Error cancelling appointment:', error);
     next(error);
   }
 };
